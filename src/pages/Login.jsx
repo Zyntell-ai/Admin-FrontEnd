@@ -18,34 +18,32 @@ export default function Login() {
   const { addToast } = useToast()
   const navigate = useNavigate()
 
-  // ── Validation ──────────────────────────────────────────────────────────────
   const validate = () => {
     const errors = {}
-    if (!email.trim())              errors.email    = 'Email is required'
-    else if (!/\S+@\S+\.\S+/.test(email)) errors.email = 'Enter a valid email'
-    if (!password)                  errors.password = 'Password is required'
-    else if (password.length < 6)   errors.password = 'Password must be at least 6 characters'
+    if (!email.trim())                    errors.email    = 'Email is required'
+    else if (!/\S+@\S+\.\S+/.test(email)) errors.email   = 'Enter a valid email'
+    if (!password)                        errors.password = 'Password is required'
+    else if (password.length < 6)         errors.password = 'Password must be at least 6 characters'
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-
     if (!validate()) return
 
     setLoading(true)
     try {
+      // Backend returns { token, admin } (no `success` field)
       const data = await loginApi(email.trim().toLowerCase(), password)
 
-      if (data.success) {
+      if (data.token && data.admin) {
         login(data.token, data.admin)
         addToast(`Welcome back, ${data.admin.name}!`, 'success')
         navigate('/', { replace: true })
       } else {
-        setError(data.error || 'Login failed')
+        setError(data.error || 'Login failed — unexpected response')
       }
     } catch (err) {
       const msg = err.response?.data?.error || 'Unable to connect to server. Make sure backend is running.'
@@ -137,11 +135,9 @@ export default function Login() {
 
             {/* Password */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Password
-                </label>
-              </div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
+                Password
+              </label>
               <div className="relative">
                 <input
                   type={showPass ? 'text' : 'password'}

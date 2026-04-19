@@ -1,23 +1,15 @@
-import apiClient from './client.js'
+// NOTE: The current backend does not have dedicated admin profile endpoints.
+// Profile data is returned during login and stored in AuthContext.
+// Profile.jsx reads directly from auth context instead of calling these.
 
-// Get my own profile
 export async function getMyProfile() {
-  const res = await apiClient.get('/admin-users/me')
-  return res.data
+  throw new Error('Profile endpoint not available. Use auth context.')
 }
 
-// Update my name or email
-export async function updateMyProfile({ name, email }) {
-  const res = await apiClient.patch('/admin-users/me', { name, email })
-  return res.data
+export async function updateMyProfile() {
+  throw new Error('Profile update not available in current backend.')
 }
 
-// Change my password
-export async function changeMyPassword({ currentPassword, newPassword, confirmPassword }) {
-  const res = await apiClient.patch('/admin-users/me/password', {
-    currentPassword,
-    newPassword,
-    confirmPassword,
-  })
-  return res.data
+export async function changeMyPassword() {
+  throw new Error('Password change not available in current backend.')
 }

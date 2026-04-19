@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import { SkeletonCard, SkeletonChart } from '../components/ui/Skeleton'
 import { useToast } from '../context/ToastContext'
+import { getOverview, getRevenue } from '../api/admin'
 import {
   CalendarCheck, DollarSign, TrendingUp, TrendingDown,
   Activity, AlertTriangle, FileText, Send, Bell,
@@ -13,13 +14,9 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Sector
 } from 'recharts'
-import {
-  dashboardMetrics, categoryDayStats, revenueChartData,
-  bookingsChartData, categoryRevenueData
-} from '../data/mockData'
 import clsx from 'clsx'
 
-const PERIOD_TABS = ['Today', 'Weekly', 'Monthly']
+const CATEGORY_COLORS = ['#4F46E5', '#818CF8', '#D4AF37', '#6EE7B7', '#94A3B8', '#F59E0B', '#EF4444']
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -31,7 +28,7 @@ const CustomTooltip = ({ active, payload, label }) => {
           <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
           <span className="text-slate-300 capitalize">{p.name}:</span>
           <span className="text-white font-semibold">
-            {p.name === 'revenue' || p.name === 'target' ? `₹${p.value.toLocaleString()}` : p.value}
+            {p.name === 'revenue' || p.name === 'total' ? `₹${p.value.toLocaleString()}` : p.value}
           </span>
         </div>
       ))}
@@ -39,48 +36,41 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-// Active pie slice renderer
 const renderActiveShape = (props) => {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
   return (
     <g>
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 6} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 6}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} />
     </g>
   )
 }
 
 export default function Dashboard() {
-  const [period, setPeriod] = useState('Today')
   const [loading, setLoading] = useState(true)
-  const [liveData, setLiveData] = useState(dashboardMetrics.today)
+  const [error, setError] = useState(null)
+  const [overview, setOverview] = useState(null)
+  const [revenue, setRevenue] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(0)
   const [activePieIdx, setActivePieIdx] = useState(null)
   const navigate = useNavigate()
   const { addToast } = useToast()
 
-  // Simulated skeleton load
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 1200)
-    return () => clearTimeout(t)
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [ovResult, revResult] = await Promise.allSettled([getOverview(), getRevenue()])
+      if (ovResult.status === 'fulfilled') setOverview(ovResult.value)
+      else addToast('Overview failed to load', 'error')
+      if (revResult.status === 'fulfilled') setRevenue(revResult.value)
+      // revenue failure is silent — charts just show empty state
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  // Update metrics when period changes
-  useEffect(() => {
-    const key = period.toLowerCase()
-    setLiveData(dashboardMetrics[key])
-    setLastUpdated(0)
-  }, [period])
-
-  // Live counter — increments bookings every 8s
-  useEffect(() => {
-    if (loading) return
-    const t = setInterval(() => {
-      const delta = Math.floor(Math.random() * 3) + 1
-      setLiveData(prev => ({ ...prev, bookings: prev.bookings + delta, revenue: prev.revenue + delta * 540 }))
-      setLastUpdated(0)
-    }, 8000)
-    return () => clearInterval(t)
-  }, [loading])
+  useEffect(() => { fetchData() }, [fetchData])
 
   // "Last updated" ticker
   useEffect(() => {
@@ -89,14 +79,31 @@ export default function Dashboard() {
   }, [])
 
   const handleRefresh = () => {
-    setLoading(true)
-    setTimeout(() => { setLoading(false); setLastUpdated(0); addToast('Dashboard refreshed', 'success', 'All metrics updated') }, 800)
+    fetchData().then(() => addToast('Dashboard refreshed', 'success', 'All metrics updated'))
   }
 
   const handlePieClick = (data) => {
-    navigate(`/bookings?category=${data.name}`)
-    addToast(`Filtered by ${data.name}`, 'info', 'Showing bookings page')
+    navigate(`/bookings?category=${data.category || data.name}`)
+    addToast(`Filtered by ${data.category || data.name}`, 'info', 'Showing bookings page')
   }
+
+  // Build chart data from revenue API
+  const revenueChartData = revenue?.byMonth?.slice(-9).map(m => ({
+    month: m.month.slice(5), // "2024-03" → "03"
+    revenue: m.total,
+  })) || []
+
+  const categoryPieData = revenue?.byCategory?.map((c, i) => ({
+    name: c.category,
+    category: c.category,
+    value: c.total,
+    color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+  })) || []
+
+  const categoryPiePercents = (() => {
+    const total = categoryPieData.reduce((s, d) => s + d.value, 0)
+    return categoryPieData.map(d => ({ ...d, pct: total > 0 ? Math.round((d.value / total) * 100) : 0 }))
+  })()
 
   if (loading) {
     return (
@@ -116,6 +123,31 @@ export default function Dashboard() {
     )
   }
 
+  if (error && !overview) {
+    return (
+      <Layout title="Dashboard">
+        <div className="card p-12 text-center">
+          <AlertTriangle size={32} className="text-red-400 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-white mb-1">Failed to load dashboard</p>
+          <p className="text-xs text-slate-500 mb-4">{error}</p>
+          <button onClick={fetchData} className="btn-primary mx-auto"><RefreshCw size={13} /> Retry</button>
+        </div>
+      </Layout>
+    )
+  }
+
+  const ov = overview || {}
+  const mrr = ov.mrr || 0
+  const activeBusinesses = ov.activeBusinesses || 0
+  const trialBusinesses = ov.trialBusinesses || 0
+  const trialToPaidRate = ov.trialToPaidRate || 0
+  const platformConfirmationRate = ov.platformConfirmationRate || 0
+  const totalBookingsToday = ov.totalBookingsToday || 0
+  const overdueInvoices = ov.overdueInvoices || 0
+  const newSignupsToday = ov.newSignupsToday || 0
+  const totalCommissionThisMonth = ov.totalCommissionThisMonth || 0
+  const currentMrr = revenue?.currentMrr || mrr
+
   return (
     <Layout title="Dashboard">
       {/* Header */}
@@ -130,28 +162,20 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleRefresh} className="btn-ghost gap-1.5"><RefreshCw size={13} /> Refresh</button>
-          <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.06] rounded-lg p-1">
-            {PERIOD_TABS.map(t => (
-              <button key={t} onClick={() => setPeriod(t)}
-                className={clsx('px-3 py-1.5 rounded-md text-xs font-medium transition-all', period === t ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white')}>
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
+        <button onClick={handleRefresh} className="btn-ghost gap-1.5">
+          <RefreshCw size={13} /> Refresh
+        </button>
       </div>
 
       {/* Top KPIs */}
       <div className="grid grid-cols-4 gap-4 mb-5">
         {[
-          { label: `${period} Bookings`, value: liveData.bookings.toLocaleString(), sub: `Expected: ${liveData.expectedBookings}`, icon: CalendarCheck, trend: 4.2, up: true },
-          { label: `${period} Revenue`, value: `₹${liveData.revenue.toLocaleString()}`, sub: 'Gross collected', icon: DollarSign, trend: 7.8, up: true, gold: true },
-          { label: 'Expected Today', value: liveData.expectedBookings.toLocaleString(), sub: `${Math.round((liveData.bookings / liveData.expectedBookings) * 100)}% fulfilled`, icon: Activity },
-          { label: 'Anomaly Rate', value: `${liveData.anomalyRate}%`, sub: 'No-shows / Total bookings', icon: AlertTriangle, trend: 1.2, up: false },
-        ].map(({ label, value, sub, icon: Icon, trend, up, gold }) => (
-          <div key={label} className={clsx('card p-5 card-hover animate-fade-in group cursor-default', gold && 'border-gold/20')}>
+          { label: 'Bookings Today', value: totalBookingsToday.toLocaleString(), sub: `${newSignupsToday} new signups today`, icon: CalendarCheck },
+          { label: 'Commission This Month', value: `₹${totalCommissionThisMonth.toLocaleString()}`, sub: 'Confirmed commissions', icon: DollarSign, gold: true },
+          { label: 'Platform Confirmation Rate', value: `${platformConfirmationRate}%`, sub: 'Completed / Total bookings', icon: Activity },
+          { label: 'Overdue Invoices', value: overdueInvoices.toLocaleString(), sub: 'Need attention', icon: AlertTriangle },
+        ].map(({ label, value, sub, icon: Icon, gold }) => (
+          <div key={label} className={clsx('card p-5 card-hover animate-fade-in cursor-default', gold && 'border-gold/20')}>
             <div className="flex items-start justify-between mb-3">
               <span className="stat-label">{label}</span>
               <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center', gold ? 'bg-gold-muted' : 'bg-indigo-500/10')}>
@@ -159,50 +183,19 @@ export default function Dashboard() {
               </div>
             </div>
             <p className={clsx('stat-value tabular-nums', gold && 'metric-gold')}>{value}</p>
-            {trend != null && (
-              <div className={clsx('flex items-center gap-1 mt-1 text-xs font-medium', up ? 'text-emerald-400' : 'text-red-400')}>
-                {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                <span>{trend}% vs last period</span>
-              </div>
-            )}
             <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
           </div>
         ))}
-      </div>
-
-      {/* Category breakdown */}
-      <div className="card p-5 mb-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="section-title">Today's Bookings by Category</h3>
-          <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
-          </span>
-        </div>
-        <div className="grid grid-cols-5 gap-3">
-          {categoryDayStats.map(cat => (
-            <button key={cat.category}
-              onClick={() => { navigate('/bookings'); addToast(`Viewing ${cat.category} bookings`, 'info') }}
-              className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.05] hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all text-left group">
-              <p className="text-xs font-semibold text-slate-400 mb-2 group-hover:text-indigo-300 transition-colors">{cat.category}</p>
-              <p className="text-xl font-bold font-display text-white">{cat.bookings}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">bookings today</p>
-              <div className="mt-2 pt-2 border-t border-white/[0.05]">
-                <p className="text-xs metric-gold font-semibold">₹{cat.revenue.toLocaleString()}</p>
-                <p className="text-[10px] text-slate-500">{cat.showUps} show-ups</p>
-              </div>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Business Health */}
       <h3 className="section-title mb-3">Business Health</h3>
       <div className="grid grid-cols-4 gap-4 mb-5">
         {[
-          { label: 'Active Businesses', value: 7, sub: '78% of capacity', color: 'text-emerald-400', bar: 'bg-emerald-500/70', pct: 78, icon: Users },
-          { label: 'Trial Businesses', value: 3, sub: 'Avg 11 days left', color: 'text-amber-400', bar: 'bg-amber-500/60', pct: 20, icon: Activity },
-          { label: 'Trial → Paid Rate', value: '68.4%', sub: 'Industry avg: 58%', color: 'text-indigo-400', bar: 'bg-indigo-500/70', pct: 68.4, icon: TrendingUp },
-          { label: 'Monthly MRR', value: '₹87,400', sub: '87% of target', color: 'metric-gold', bar: 'bg-gradient-gold', pct: 87, gold: true, icon: DollarSign },
+          { label: 'Active Businesses', value: activeBusinesses, sub: 'Paid plan (plus/pro)', color: 'text-emerald-400', bar: 'bg-emerald-500/70', pct: Math.min(activeBusinesses * 10, 100), icon: Users },
+          { label: 'Trial Businesses', value: trialBusinesses, sub: 'Currently on trial', color: 'text-amber-400', bar: 'bg-amber-500/60', pct: Math.min(trialBusinesses * 10, 100), icon: Activity },
+          { label: 'Trial → Paid Rate', value: `${trialToPaidRate}%`, sub: 'Conversion rate', color: 'text-indigo-400', bar: 'bg-indigo-500/70', pct: trialToPaidRate, icon: TrendingUp },
+          { label: 'Current MRR', value: `₹${currentMrr.toLocaleString()}`, sub: 'Monthly recurring revenue', color: 'metric-gold', bar: 'bg-gradient-gold', pct: Math.min((currentMrr / 100000) * 100, 100), gold: true, icon: DollarSign },
         ].map(({ label, value, sub, color, bar, pct, gold, icon: Icon }) => (
           <div key={label} className={clsx('card p-5', gold && 'border-gold/15')}>
             <div className="flex items-center gap-2 mb-2">
@@ -210,7 +203,9 @@ export default function Dashboard() {
               <span className="stat-label">{label}</span>
             </div>
             <p className={clsx('stat-value', color)}>{value}</p>
-            <div className="mt-2 bg-white/5 rounded-full h-1.5"><div className={clsx('h-1.5 rounded-full', bar)} style={{ width: `${pct}%` }} /></div>
+            <div className="mt-2 bg-white/5 rounded-full h-1.5">
+              <div className={clsx('h-1.5 rounded-full', bar)} style={{ width: `${pct}%` }} />
+            </div>
             <p className="text-[10px] text-slate-500 mt-1">{sub}</p>
           </div>
         ))}
@@ -220,10 +215,10 @@ export default function Dashboard() {
       <h3 className="section-title mb-3">Platform Signals</h3>
       <div className="grid grid-cols-4 gap-4 mb-5">
         {[
-          { label: 'Active Alerts', value: 7, sub: '3 critical', icon: Bell, border: 'border-amber-500/20', bg: 'bg-amber-500/10', text: 'text-amber-400', path: '/alerts' },
-          { label: 'Critical Anomalies', value: 4, sub: 'Needs review', icon: ShieldAlert, border: 'border-red-500/20', bg: 'bg-red-500/10', text: 'text-red-400', path: '/analytics' },
-          { label: 'Overdue Payments', value: 2, sub: '₹7,680 pending', icon: CreditCard, border: 'border-orange-500/20', bg: 'bg-orange-500/10', text: 'text-orange-400', path: '/billing' },
-          { label: 'Low Performing', value: 2, sub: '<5 bookings/week', icon: UserX, border: 'border-slate-500/20', bg: 'bg-slate-500/10', text: 'text-slate-400', path: '/analytics' },
+          { label: 'Overdue Invoices', value: overdueInvoices, sub: 'Need immediate action', icon: CreditCard, border: 'border-amber-500/20', bg: 'bg-amber-500/10', text: 'text-amber-400', path: '/billing' },
+          { label: 'Commission This Month', value: `₹${totalCommissionThisMonth.toLocaleString()}`, sub: 'Confirmed commissions', icon: ShieldAlert, border: 'border-indigo-500/20', bg: 'bg-indigo-500/10', text: 'text-indigo-400', path: '/commissions' },
+          { label: 'Trial Businesses', value: trialBusinesses, sub: 'Being evaluated', icon: Bell, border: 'border-orange-500/20', bg: 'bg-orange-500/10', text: 'text-orange-400', path: '/businesses' },
+          { label: 'Today\'s Signups', value: newSignupsToday, sub: 'New businesses registered', icon: UserX, border: 'border-slate-500/20', bg: 'bg-slate-500/10', text: 'text-slate-400', path: '/businesses' },
         ].map(({ label, value, sub, icon: Icon, border, bg, text, path }) => (
           <button key={label} onClick={() => navigate(path)}
             className={clsx('card p-4 border text-left hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 cursor-pointer', border)}>
@@ -237,94 +232,100 @@ export default function Dashboard() {
 
       {/* Charts */}
       <div className="grid grid-cols-12 gap-4 mb-5">
-        {/* Revenue */}
-        <div className="col-span-5 card p-5">
+        {/* Revenue Trend */}
+        <div className="col-span-6 card p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">Revenue Trend</h3>
-            <span className="badge badge-indigo">Monthly</span>
+            <span className="badge badge-indigo">By Month</span>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={revenueChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="month" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
-              <Tooltip content={<CustomTooltip />} />
-              <Line type="monotone" dataKey="revenue" name="revenue" stroke="#4F46E5" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: '#4F46E5', stroke: '#818CF8', strokeWidth: 2 }} isAnimationActive animationDuration={1000} />
-              <Line type="monotone" dataKey="target" name="target" stroke="#D4AF37" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive animationDuration={1200} />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-2">
-            <div className="flex items-center gap-2"><div className="w-3 h-0.5 bg-indigo-500 rounded" /><span className="text-xs text-slate-500">Revenue</span></div>
-            <div className="flex items-center gap-2"><div className="w-3 h-px bg-gold" style={{ borderTop: '1px dashed #D4AF37' }} /><span className="text-xs text-slate-500">Target</span></div>
-          </div>
+          {revenueChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={revenueChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="month" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+                <Tooltip content={<CustomTooltip />} />
+                <Line type="monotone" dataKey="revenue" name="revenue" stroke="#4F46E5" strokeWidth={2.5} dot={false}
+                  activeDot={{ r: 5, fill: '#4F46E5', stroke: '#818CF8', strokeWidth: 2 }} isAnimationActive animationDuration={1000} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">No revenue data yet</div>
+          )}
         </div>
 
-        {/* Bookings vs Show-ups */}
-        <div className="col-span-4 card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="section-title">Bookings vs Show-ups</h3>
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={bookingsChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }} barGap={4}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="day" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="bookings" name="bookings" fill="#4F46E5" radius={[3, 3, 0, 0]} opacity={0.85} isAnimationActive animationDuration={800} />
-              <Bar dataKey="showups" name="showups" fill="#D4AF37" radius={[3, 3, 0, 0]} opacity={0.85} isAnimationActive animationDuration={1000} />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-2">
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-indigo-500" /><span className="text-xs text-slate-500">Bookings</span></div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-gold" /><span className="text-xs text-slate-500">Show-ups</span></div>
-          </div>
-        </div>
-
-        {/* Clickable Pie */}
-        <div className="col-span-3 card p-5">
+        {/* Revenue by Category Pie */}
+        <div className="col-span-6 card p-5">
           <h3 className="section-title mb-1">Revenue by Category</h3>
           <p className="text-[10px] text-slate-500 mb-3">Click slice to filter bookings</p>
-          <ResponsiveContainer width="100%" height={150}>
-            <PieChart>
-              <Pie
-                data={categoryRevenueData}
-                cx="50%" cy="50%"
-                innerRadius={40} outerRadius={62}
-                paddingAngle={3}
-                dataKey="value"
-                activeIndex={activePieIdx}
-                activeShape={renderActiveShape}
-                onMouseEnter={(_, idx) => setActivePieIdx(idx)}
-                onMouseLeave={() => setActivePieIdx(null)}
-                onClick={handlePieClick}
-                style={{ cursor: 'pointer' }}
-                isAnimationActive
-                animationDuration={800}
-              >
-                {categoryRevenueData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#0F1629', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-1.5 mt-1">
-            {categoryRevenueData.map((d, i) => (
-              <button key={i} onClick={() => handlePieClick(d)}
-                className="w-full flex items-center justify-between text-xs hover:bg-white/[0.04] rounded px-1 py-0.5 transition-colors group">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: d.color }} /><span className="text-slate-400 group-hover:text-white transition-colors">{d.name}</span></div>
-                <span className="text-white font-medium">{d.value}%</span>
-              </button>
-            ))}
-          </div>
+          {categoryPiePercents.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={150}>
+                <PieChart>
+                  <Pie
+                    data={categoryPiePercents}
+                    cx="50%" cy="50%"
+                    innerRadius={40} outerRadius={62}
+                    paddingAngle={3}
+                    dataKey="value"
+                    activeIndex={activePieIdx}
+                    activeShape={renderActiveShape}
+                    onMouseEnter={(_, idx) => setActivePieIdx(idx)}
+                    onMouseLeave={() => setActivePieIdx(null)}
+                    onClick={handlePieClick}
+                    style={{ cursor: 'pointer' }}
+                    isAnimationActive
+                    animationDuration={800}
+                  >
+                    {categoryPiePercents.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: '#0F1629', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
+                {categoryPiePercents.map((d, i) => (
+                  <button key={i} onClick={() => handlePieClick(d)}
+                    className="flex items-center justify-between text-xs hover:bg-white/[0.04] rounded px-1 py-0.5 transition-colors group">
+                    <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: d.color }} /><span className="text-slate-400 group-hover:text-white transition-colors truncate">{d.name}</span></div>
+                    <span className="text-white font-medium">{d.pct}%</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">No category data yet</div>
+          )}
         </div>
       </div>
+
+      {/* Recent Activity */}
+      {ov.recentActivity?.length > 0 && (
+        <>
+          <h3 className="section-title mb-3">Recent Activity</h3>
+          <div className="card p-4 mb-5">
+            <div className="space-y-2">
+              {ov.recentActivity.map((item, i) => (
+                <div key={item.id || i} className="flex items-center gap-3 py-2 border-b border-white/[0.04] last:border-0">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                  <span className="text-xs text-white font-medium">{item.businessName}</span>
+                  <span className="badge badge-yellow text-[10px]">{item.type}</span>
+                  <span className="text-[10px] text-slate-500 ml-auto">
+                    {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Recent'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Quick Actions */}
       <h3 className="section-title mb-3">Quick Actions</h3>
       <div className="grid grid-cols-4 gap-3">
         {[
           { label: 'Generate Invoices', sub: 'Bulk for all businesses', icon: FileText, path: '/billing', toast: 'Navigating to Billing' },
-          { label: 'Send Reminders', sub: '2 overdue payments', icon: Send, path: '/billing', toast: 'Navigating to Billing' },
-          { label: 'View All Alerts', sub: '7 active alerts', icon: Bell, path: '/alerts', toast: 'Navigating to Alerts' },
+          { label: 'Send Reminders', sub: `${overdueInvoices} overdue payments`, icon: Send, path: '/billing', toast: 'Navigating to Billing' },
+          { label: 'View All Alerts', sub: 'Review open alerts', icon: Bell, path: '/alerts', toast: 'Navigating to Alerts' },
           { label: 'Add Business', sub: 'Onboard new client', icon: Plus, path: '/businesses', toast: 'Navigating to Businesses' },
         ].map(({ label, sub, icon: Icon, path, toast }) => (
           <button key={label}

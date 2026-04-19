@@ -2,323 +2,280 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { invoices, businesses } from '../data/mockData'
+import { getInvoices, adjustInvoice, generateAllInvoices } from '../api/admin'
 import {
   Download, Plus, Send, RefreshCw, FileText,
-  AlertCircle, CheckCircle, Clock, SlidersHorizontal, Mail, X
+  AlertCircle, CheckCircle, Clock, X, Loader2
 } from 'lucide-react'
 import clsx from 'clsx'
 
-const CATEGORIES = ['All', 'Healthcare', 'Restaurant', 'Real Estate', 'Beauty']
+const CATEGORIES = ['All', 'Healthcare', 'Restaurant', 'Real Estate', 'Beauty', 'Education']
+const STATUSES   = ['All', 'PENDING', 'OVERDUE', 'PAID', 'WAIVED']
 
 function StatusBadge({ status }) {
-  const map = { PAID: 'badge-green', PENDING: 'badge-indigo', OVERDUE: 'badge-red', WAIVED: 'badge-gray' }
+  const map  = { PAID: 'badge-green', PENDING: 'badge-indigo', OVERDUE: 'badge-red', WAIVED: 'badge-gray' }
   const icons = { PAID: CheckCircle, PENDING: Clock, OVERDUE: AlertCircle, WAIVED: CheckCircle }
   const Icon = icons[status] || Clock
   return <span className={clsx('badge gap-1', map[status])}><Icon size={10} /> {status}</span>
 }
 
-// Countdown confirm button
-function CountdownConfirm({ label, onConfirm, onCancel, seconds = 5, className }) {
-  const [count, setCount] = useState(seconds)
-  useEffect(() => {
-    if (count <= 0) { onConfirm(); return }
-    const t = setTimeout(() => setCount(c => c - 1), 1000)
-    return () => clearTimeout(t)
-  }, [count, onConfirm])
-  return (
-    <div className="flex gap-3">
-      <button onClick={onConfirm} className={clsx('flex-1 justify-center flex items-center gap-2', className)}>
-        {label} {count > 0 && <span className="text-xs opacity-70">({count}s)</span>}
-      </button>
-      <button onClick={onCancel} className="btn-ghost flex-1 justify-center">Cancel</button>
-    </div>
-  )
-}
-
 export default function Billing() {
   const { addToast } = useToast()
+  const [invoices, setInvoices]         = useState([])
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState(null)
   const [activeCategory, setActiveCategory] = useState('All')
-  const [selected, setSelected] = useState([])
-  const [invoiceList, setInvoiceList] = useState(invoices)
+  const [statusFilter, setStatusFilter]     = useState('All')
+  const [selected, setSelected]             = useState([])
+  const [generateModal, setGenerateModal]   = useState(false)
+  const [generateMonth, setGenerateMonth]   = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [generating, setGenerating]     = useState(false)
+  const [adjustModal, setAdjModal]      = useState(null)
+  const [adjustAmount, setAdjustAmount] = useState('')
+  const [adjustReason, setAdjustReason] = useState('')
+  const [adjusting, setAdjusting]       = useState(false)
 
-  const [generateModal, setGenerateModal] = useState(false)
-  const [adjustModal, setAdjModal] = useState(null)
-  const [manualModal, setManualModal] = useState(false)
-  const [reminderModal, setReminderModal] = useState(null)
-  const [paidModal, setPaidModal] = useState(null)
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = {}
+      if (statusFilter !== 'All')   params.status = statusFilter
+      if (activeCategory !== 'All') params.category = activeCategory
+      const data = await getInvoices(params)
+      setInvoices(data.invoices || [])
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to load invoices'
+      setError(msg)
+      addToast(msg, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, activeCategory])
 
-  const [genForm, setGenForm] = useState({ businessId: '', month: '2024-04', baseFee: 3000 })
-  const [adjForm, setAdjForm] = useState({ amount: '', reason: '', type: 'add' })
+  useEffect(() => { fetchData() }, [fetchData])
 
-  const filtered = useMemo(() =>
-    activeCategory === 'All' ? invoiceList : invoiceList.filter(i => i.category === activeCategory)
-  , [activeCategory, invoiceList])
+  const filtered = useMemo(() => invoices, [invoices]) // already filtered server-side
 
-  const totals = useMemo(() => filtered.reduce((acc, i) => {
-    if (i.status === 'PAID') acc.paid += i.total
-    else if (i.status === 'PENDING') acc.pending += i.total
-    else if (i.status === 'OVERDUE') acc.overdue += i.total
+  const totals = useMemo(() => filtered.reduce((acc, inv) => {
+    acc.total += inv.total || 0
+    if (inv.status === 'PENDING' || inv.status === 'OVERDUE') acc.outstanding += inv.total || 0
+    if (inv.status === 'PAID') acc.collected += inv.total || 0
+    if (inv.status === 'OVERDUE') acc.overdue++
     return acc
-  }, { paid: 0, pending: 0, overdue: 0 }), [filtered])
+  }, { total: 0, outstanding: 0, collected: 0, overdue: 0 }), [filtered])
 
-  const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  const toggleAll = () => setSelected(selected.length === filtered.length ? [] : filtered.map(i => i.id))
-
-  const handleMarkPaid = useCallback((invoiceId) => {
-    setInvoiceList(prev => prev.map(i => i.id === invoiceId ? { ...i, status: 'PAID', paidAt: '2024-04-14' } : i))
-    setPaidModal(null)
-    addToast('Invoice marked as paid', 'success')
-  }, [addToast])
-
-  const handleAdjustment = () => {
-    const delta = adjForm.type === 'add' ? parseInt(adjForm.amount) : -parseInt(adjForm.amount)
-    setInvoiceList(prev => prev.map(i => i.id === adjustModal.id ? { ...i, adjustments: i.adjustments + delta, total: i.total + delta } : i))
-    setAdjModal(null)
-    addToast(`Adjustment of ${adjForm.type === 'add' ? '+' : '-'}₹${adjForm.amount} applied`, 'success', adjForm.reason)
-    setAdjForm({ amount: '', reason: '', type: 'add' })
+  const handleGenerateAll = async () => {
+    if (!generateMonth) { addToast('Please select a month', 'error'); return }
+    setGenerating(true)
+    try {
+      const result = await generateAllInvoices(generateMonth)
+      addToast(`Generated ${result.generated} invoices (${result.skipped} skipped)`, 'success')
+      setGenerateModal(false)
+      fetchData()
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Generation failed', 'error')
+    } finally {
+      setGenerating(false)
+    }
   }
 
-  const sameDayDue = filtered.filter(i => i.status !== 'PAID' && i.dueDate === '2024-04-15').length
+  const handleAdjust = async () => {
+    if (!adjustModal) return
+    const amt = parseFloat(adjustAmount)
+    if (isNaN(amt) || amt === 0) { addToast('Please enter a valid amount', 'error'); return }
+    if (!adjustReason.trim()) { addToast('Reason is required', 'error'); return }
+    setAdjusting(true)
+    try {
+      await adjustInvoice(adjustModal.id, amt, adjustReason)
+      addToast(`Invoice adjusted by ₹${Math.abs(amt).toLocaleString()}`, 'success')
+      setAdjModal(null); setAdjustAmount(''); setAdjustReason('')
+      fetchData()
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Adjustment failed', 'error')
+    } finally {
+      setAdjusting(false)
+    }
+  }
+
+  const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  const toggleAll = () => setSelected(prev => prev.length === filtered.length ? [] : filtered.map(i => i.id))
 
   return (
     <Layout title="Billing">
-      <div className="flex items-center justify-between mb-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="page-title mb-0.5">Billing</h1>
-          <p className="text-sm text-slate-500">Invoice management and payment tracking</p>
+          <h1 className="page-title mb-0.5">Billing & Invoices</h1>
+          <p className="text-sm text-slate-500">
+            {loading ? 'Loading...' : `${filtered.length} invoices · ₹${totals.outstanding.toLocaleString()} outstanding`}
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {sameDayDue > 0 && (
-            <button onClick={() => addToast(`Reminders sent for ${sameDayDue} due-today invoices`, 'success')}
-              className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs px-3 py-2 rounded-lg font-medium hover:bg-amber-500/20 transition-all">
-              <Clock size={12} /> {sameDayDue} Due Today — Send All
-            </button>
-          )}
-          <button onClick={() => setManualModal(true)} className="btn-ghost"><SlidersHorizontal size={13} /> Manual Entry</button>
-          <button onClick={() => { addToast('CSV export started', 'success') }} className="btn-ghost"><Download size={13} /> Export</button>
-          <button onClick={() => setGenerateModal(true)} className="btn-primary"><Plus size={13} /> Generate Invoice</button>
+        <div className="flex items-center gap-2">
+          <button onClick={fetchData} className="btn-ghost gap-1.5"><RefreshCw size={13} /> Refresh</button>
+          <button onClick={() => addToast('CSV export started', 'success')} className="btn-ghost"><Download size={13} /> Export</button>
+          <button onClick={() => setGenerateModal(true)} className="btn-primary"><Plus size={14} /> Generate Invoices</button>
         </div>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-4 mb-5">
-        <div className="card p-5 border-emerald-500/15">
-          <div className="flex items-center justify-between mb-2"><span className="stat-label">Collected</span><CheckCircle size={16} className="text-emerald-400" /></div>
-          <p className="text-2xl font-bold font-display text-emerald-400">₹{totals.paid.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1">{filtered.filter(i => i.status === 'PAID').length} invoices paid</p>
-        </div>
-        <div className="card p-5 border-indigo-500/15">
-          <div className="flex items-center justify-between mb-2"><span className="stat-label">Pending</span><Clock size={16} className="text-indigo-400" /></div>
-          <p className="text-2xl font-bold font-display text-indigo-400">₹{totals.pending.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1">{filtered.filter(i => i.status === 'PENDING').length} invoices pending</p>
-        </div>
-        <div className="card p-5 border-red-500/15">
-          <div className="flex items-center justify-between mb-2"><span className="stat-label">Overdue</span><AlertCircle size={16} className="text-red-400" /></div>
-          <p className="text-2xl font-bold font-display text-red-400">₹{totals.overdue.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1">{filtered.filter(i => i.status === 'OVERDUE').length} invoices overdue</p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-0 border-b border-white/[0.06] mb-0">
-        {CATEGORIES.map(cat => (
-          <button key={cat} onClick={() => setActiveCategory(cat)}
-            className={clsx('px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px',
-              activeCategory === cat ? 'text-white border-indigo-500 bg-indigo-500/5' : 'text-slate-400 border-transparent hover:text-slate-200')}>
-            {cat}
-          </button>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        {[
+          { label: 'Total Invoices', value: filtered.length, color: 'text-white' },
+          { label: 'Outstanding', value: `₹${totals.outstanding.toLocaleString()}`, color: 'text-amber-400', border: 'border-amber-500/20' },
+          { label: 'Collected', value: `₹${totals.collected.toLocaleString()}`, color: 'metric-gold', border: 'border-gold/15' },
+          { label: 'Overdue Count', value: totals.overdue, color: 'text-red-400', border: 'border-red-500/20' },
+        ].map(({ label, value, color, border }) => (
+          <div key={label} className={clsx('card p-4 border', border || 'border-white/[0.06]')}>
+            <p className="stat-label">{label}</p>
+            <p className={clsx('text-xl font-bold font-display mt-1', color)}>{loading ? '—' : value}</p>
+          </div>
         ))}
       </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-white/[0.06]">
-              <th className="px-4 py-3 w-10">
-                <input type="checkbox" checked={selected.length === filtered.length && filtered.length > 0}
-                  onChange={toggleAll} className="rounded accent-indigo-500 cursor-pointer" />
-              </th>
-              {['Business', 'Category', 'Month', 'Base Fee', 'Commissions', 'Adjustments', 'Total', 'Status', 'Due Date', 'Actions'].map(h => (
-                <th key={h} className="text-left px-3 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((inv) => (
-              <tr key={inv.id} className={clsx('border-b border-white/[0.04] table-row-hover', inv.status === 'OVERDUE' && 'bg-red-500/[0.02]', selected.includes(inv.id) && 'bg-indigo-500/5')}>
-                <td className="px-4 py-3">
-                  <input type="checkbox" checked={selected.includes(inv.id)} onChange={() => toggleSelect(inv.id)} className="rounded accent-indigo-500 cursor-pointer" />
-                </td>
-                <td className="px-3 py-3 text-sm font-semibold text-white">{inv.businessName}</td>
-                <td className="px-3 py-3"><span className="badge badge-indigo text-[10px]">{inv.category}</span></td>
-                <td className="px-3 py-3 text-slate-400 text-xs">{inv.month}</td>
-                <td className="px-3 py-3 text-slate-300 text-xs">₹{inv.baseFee.toLocaleString()}</td>
-                <td className="px-3 py-3 text-slate-300 text-xs">₹{(inv.bookingCommissions + inv.showupCommissions + inv.leadCommissions).toLocaleString()}</td>
-                <td className="px-3 py-3 text-xs">
-                  {inv.adjustments !== 0
-                    ? <span className={inv.adjustments > 0 ? 'text-red-400' : 'text-emerald-400'}>{inv.adjustments > 0 ? '+' : ''}₹{inv.adjustments.toLocaleString()}</span>
-                    : <span className="text-slate-600">—</span>}
-                </td>
-                <td className="px-3 py-3">
-                  <span className={clsx('text-sm font-bold font-display', inv.status === 'OVERDUE' ? 'text-red-400' : inv.status === 'PAID' ? 'metric-gold' : 'text-white')}>
-                    ₹{inv.total.toLocaleString()}
-                  </span>
-                </td>
-                <td className="px-3 py-3"><StatusBadge status={inv.status} /></td>
-                <td className="px-3 py-3 text-xs text-slate-400">{inv.dueDate}</td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => addToast('PDF generated', 'success', inv.businessName)} className="text-[10px] btn-ghost px-1.5 py-1 gap-1"><FileText size={9} /> PDF</button>
-                    {inv.status !== 'PAID' && (
-                      <>
-                        <button onClick={() => setReminderModal(inv)} className="text-[10px] btn-ghost px-1.5 py-1 gap-1"><Send size={9} /> Remind</button>
-                        <button onClick={() => setPaidModal(inv)}
-                          className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 px-1.5 py-1 rounded-md transition-all">
-                          Mark Paid
-                        </button>
-                      </>
-                    )}
-                    <button onClick={() => { setAdjModal(inv); setAdjForm({ amount: '', reason: '', type: 'add' }) }}
-                      className="text-[10px] btn-ghost px-1.5 py-1 gap-1"><SlidersHorizontal size={9} /></button>
-                    <button onClick={() => addToast('Invoice regenerated', 'info')} className="text-[10px] btn-ghost px-1.5 py-1 gap-1"><RefreshCw size={9} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-5">
+        <select value={activeCategory} onChange={e => setActiveCategory(e.target.value)} className="input-field w-44 text-xs bg-[#0F1629]">
+          {CATEGORIES.map(c => <option key={c} value={c} className="bg-[#0F1629]">{c === 'All' ? 'All Categories' : c}</option>)}
+        </select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field w-36 text-xs bg-[#0F1629]">
+          {STATUSES.map(s => <option key={s} value={s} className="bg-[#0F1629]">{s === 'All' ? 'All Statuses' : s}</option>)}
+        </select>
+        {selected.length > 0 && (
+          <button onClick={() => addToast(`Reminders sent to ${selected.length} businesses`, 'success')}
+            className="flex items-center gap-1.5 text-xs text-indigo-300 border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 rounded-lg hover:bg-indigo-500/20 transition-all">
+            <Send size={12} /> Send Reminders ({selected.length})
+          </button>
+        )}
+        <p className="text-xs text-slate-500 ml-auto">{filtered.length} invoices</p>
       </div>
 
-      {/* Floating Bulk Bar */}
-      {selected.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-fade-in">
-          <div className="flex items-center gap-3 bg-[#0F1629] border border-indigo-500/30 rounded-2xl px-5 py-3 shadow-2xl">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-xs font-bold text-white">{selected.length}</div>
-              <span className="text-sm text-white font-medium">{selected.length} selected</span>
-            </div>
-            <div className="w-px h-6 bg-white/10" />
-            <button onClick={() => { addToast(`Reminders sent for ${selected.length} invoices`, 'success'); setSelected([]) }}
-              className="flex items-center gap-1.5 text-xs bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 px-3 py-1.5 rounded-lg font-medium">
-              <Mail size={12} /> Send Reminders
-            </button>
-            <button onClick={() => { addToast(`PDF batch generated for ${selected.length} invoices`, 'success'); setSelected([]) }}
-              className="flex items-center gap-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-lg font-medium">
-              <FileText size={12} /> Bulk PDF
-            </button>
-            <button onClick={() => { addToast('Exported to CSV', 'success'); setSelected([]) }}
-              className="flex items-center gap-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-lg font-medium">
-              <Download size={12} /> Export
-            </button>
-            <button onClick={() => setSelected([])} className="text-slate-500 hover:text-white transition-colors"><X size={15} /></button>
+      {/* Invoice Table */}
+      {loading ? (
+        <div className="card p-8 text-center text-slate-500 animate-pulse text-sm">Loading invoices...</div>
+      ) : error ? (
+        <div className="card p-12 text-center">
+          <AlertCircle size={32} className="text-red-400 mx-auto mb-3" />
+          <p className="text-sm text-white mb-1">Failed to load invoices</p>
+          <p className="text-xs text-slate-500 mb-4">{error}</p>
+          <button onClick={fetchData} className="btn-primary mx-auto"><RefreshCw size={13} /> Retry</button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="card p-12 text-center text-slate-500 text-sm">No invoices found for selected filters</div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.06]">
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" checked={selected.length === filtered.length && filtered.length > 0}
+                      onChange={toggleAll} className="rounded accent-indigo-500 cursor-pointer" />
+                  </th>
+                  {['Business', 'Month', 'Plan', 'Base Fee', 'Commissions', 'Adjustments', 'Total', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(inv => (
+                  <tr key={inv.id} className="border-b border-white/[0.04] table-row-hover">
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.includes(inv.id)} onChange={() => toggleSelect(inv.id)} className="rounded accent-indigo-500 cursor-pointer" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-white font-medium text-xs">{inv.businessName}</p>
+                      <p className="text-[10px] text-slate-500">{inv.category}</p>
+                    </td>
+                    <td className="px-4 py-3 text-slate-300 text-xs">{inv.month}</td>
+                    <td className="px-4 py-3"><span className="badge badge-indigo">{inv.plan?.toUpperCase()}</span></td>
+                    <td className="px-4 py-3 text-slate-300 text-xs">₹{(inv.baseFee || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-slate-300 text-xs">₹{((inv.bookingCommissions || 0) + (inv.showupCommissions || 0) + (inv.leadCommissions || 0)).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {inv.adjustments !== 0 ? (
+                        <span className={clsx('font-medium', (inv.adjustments || 0) >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                          {(inv.adjustments || 0) >= 0 ? '+' : ''}₹{Math.abs(inv.adjustments || 0).toLocaleString()}
+                        </span>
+                      ) : <span className="text-slate-500">—</span>}
+                    </td>
+                    <td className="px-4 py-3 font-bold metric-gold">₹{(inv.total || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {(inv.status === 'PENDING' || inv.status === 'OVERDUE') && (
+                          <button onClick={() => { setAdjModal(inv); setAdjustAmount(''); setAdjustReason('') }}
+                            className="text-[10px] text-indigo-400 border border-indigo-500/20 bg-indigo-500/10 px-2 py-1 rounded hover:bg-indigo-500/20 transition-all">
+                            Adjust
+                          </button>
+                        )}
+                        {(inv.status === 'PENDING' || inv.status === 'OVERDUE') && (
+                          <button onClick={() => addToast(`Reminder sent for ${inv.businessName}`, 'success')}
+                            className="text-[10px] text-slate-400 border border-white/10 bg-white/5 px-2 py-1 rounded hover:bg-white/10 transition-all">
+                            <Send size={10} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-white/[0.1] bg-white/[0.02]">
+                  <td colSpan={7} className="px-4 py-3 text-xs font-semibold text-slate-400">TOTALS</td>
+                  <td className="px-4 py-3 font-bold metric-gold">₹{totals.total.toLocaleString()}</td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Mark Paid Modal with Countdown */}
-      <Modal open={!!paidModal} onClose={() => setPaidModal(null)} title="Confirm Payment" size="sm">
-        {paidModal && (
-          <div className="space-y-4">
-            <div className="bg-white/[0.04] rounded-lg p-3 border border-white/[0.08]">
-              <p className="text-sm font-semibold text-white">{paidModal.businessName}</p>
-              <p className="text-xs text-slate-400 mt-1">Marking ₹{paidModal.total.toLocaleString()} as PAID for {paidModal.month}</p>
-            </div>
-            <p className="text-xs text-slate-500">This will update the invoice status and send a receipt to the business. Auto-confirming in a few seconds...</p>
-            <CountdownConfirm
-              label="Confirm Payment"
-              seconds={5}
-              onConfirm={() => handleMarkPaid(paidModal.id)}
-              onCancel={() => setPaidModal(null)}
-              className="btn-primary"
-            />
-          </div>
-        )}
-      </Modal>
-
-      {/* Generate Invoice Modal */}
-      <Modal open={generateModal} onClose={() => setGenerateModal(false)} title="Generate Invoice">
+      {/* Generate Invoices Modal */}
+      <Modal isOpen={generateModal} onClose={() => setGenerateModal(false)} title="Generate All Invoices" size="sm">
         <div className="space-y-4">
+          <p className="text-sm text-slate-400">Generate invoices for all active businesses for the selected month. Businesses that already have invoices for that month will be skipped.</p>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Business</label>
-            <select value={genForm.businessId} onChange={e => setGenForm(f => ({ ...f, businessId: e.target.value }))} className="input-field">
-              <option value="" className="bg-[#0F1629]">Select business...</option>
-              {businesses.map(b => <option key={b.id} value={b.id} className="bg-[#0F1629]">{b.name} — {b.category}</option>)}
-            </select>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Month (YYYY-MM)</label>
+            <input type="month" value={generateMonth} onChange={e => setGenerateMonth(e.target.value)}
+              className="input-field w-full text-sm" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">Month</label>
-              <input type="month" value={genForm.month} onChange={e => setGenForm(f => ({ ...f, month: e.target.value }))} className="input-field" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">Base Fee (₹)</label>
-              <input type="number" value={genForm.baseFee} onChange={e => setGenForm(f => ({ ...f, baseFee: e.target.value }))} className="input-field" />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => { setGenerateModal(false); addToast('Invoice generated successfully', 'success') }} className="btn-primary flex-1 justify-center gap-2 flex items-center"><FileText size={13} /> Generate</button>
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleGenerateAll} disabled={generating}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+              {generating ? <><Loader2 size={13} className="animate-spin" /> Generating...</> : <><FileText size={13} /> Generate</>}
+            </button>
             <button onClick={() => setGenerateModal(false)} className="btn-ghost flex-1 justify-center">Cancel</button>
           </div>
         </div>
       </Modal>
 
-      {/* Adjustment Modal */}
-      <Modal open={!!adjustModal} onClose={() => setAdjModal(null)} title={`Adjustment — ${adjustModal?.businessName}`}>
-        {adjustModal && (
-          <div className="space-y-4">
-            <div className="bg-white/[0.04] rounded-lg p-3 border border-white/[0.08] flex justify-between">
-              <span className="text-xs text-slate-400">Current Total</span>
-              <span className="text-white font-semibold text-sm">₹{adjustModal.total.toLocaleString()}</span>
-            </div>
-            <div className="flex gap-2">
-              {['add', 'subtract'].map(t => (
-                <button key={t} onClick={() => setAdjForm(f => ({ ...f, type: t }))}
-                  className={clsx('flex-1 py-2.5 rounded-lg text-xs font-medium transition-all border', adjForm.type === t
-                    ? t === 'add' ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                    : 'bg-white/5 border-white/10 text-slate-400')}>
-                  {t === 'add' ? '+ Add Charge' : '− Give Credit'}
-                </button>
-              ))}
-            </div>
-            <div><label className="text-xs text-slate-400 mb-1 block">Amount (₹)</label><input type="number" value={adjForm.amount} onChange={e => setAdjForm(f => ({ ...f, amount: e.target.value }))} placeholder="e.g., 500" className="input-field" /></div>
-            <div><label className="text-xs text-slate-400 mb-1 block">Reason <span className="text-red-400">*</span></label><textarea value={adjForm.reason} onChange={e => setAdjForm(f => ({ ...f, reason: e.target.value }))} rows={2} placeholder="Reason for this adjustment..." className="input-field resize-none" /></div>
-            <div className="flex gap-3">
-              <button onClick={handleAdjustment} disabled={!adjForm.amount || !adjForm.reason} className="btn-primary flex-1 justify-center disabled:opacity-50">Apply Adjustment</button>
-              <button onClick={() => setAdjModal(null)} className="btn-ghost flex-1 justify-center">Cancel</button>
-            </div>
+      {/* Adjust Invoice Modal */}
+      <Modal isOpen={!!adjustModal} onClose={() => setAdjModal(null)} title={`Adjust Invoice — ${adjustModal?.businessName}`} size="sm">
+        <div className="space-y-4">
+          <div className="bg-white/[0.03] rounded-xl p-3 text-xs space-y-1">
+            <div className="flex justify-between"><span className="text-slate-500">Month</span><span className="text-white">{adjustModal?.month}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Current Total</span><span className="metric-gold font-bold">₹{(adjustModal?.total || 0).toLocaleString()}</span></div>
           </div>
-        )}
-      </Modal>
-
-      {/* Reminder Modal */}
-      <Modal open={!!reminderModal} onClose={() => setReminderModal(null)} title={reminderModal === 'bulk' ? 'Bulk Reminders' : `Reminder — ${reminderModal?.businessName}`} size="sm">
-        {reminderModal && (
-          <div className="space-y-4">
-            <div className="bg-white/[0.04] rounded-lg p-3 border border-white/[0.08] text-xs text-slate-300">
-              Will send reminder to {reminderModal === 'bulk' ? `${selected.length} businesses` : `${reminderModal.businessName} for ₹${reminderModal.total?.toLocaleString()}`}
-            </div>
-            <textarea rows={2} placeholder="Optional personalised note..." className="input-field resize-none" />
-            <div className="flex gap-3">
-              <button onClick={() => { setReminderModal(null); addToast('Reminder sent', 'success') }} className="btn-primary flex-1 justify-center gap-2 flex items-center"><Mail size={13} /> Send</button>
-              <button onClick={() => setReminderModal(null)} className="btn-ghost flex-1 justify-center">Cancel</button>
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Adjustment Amount (use negative to deduct)</label>
+            <input type="number" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)}
+              placeholder="e.g. 500 or -200" className="input-field w-full text-sm" />
           </div>
-        )}
-      </Modal>
-
-      {/* Manual Entry Modal */}
-      <Modal open={manualModal} onClose={() => setManualModal(false)} title="Manual Invoice Entry">
-        <div className="space-y-3">
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3"><p className="text-xs text-amber-400 font-medium">⚠ Manual Entry — use only for exceptional cases</p></div>
-          {[{ label: 'Business Name', type: 'text' }, { label: 'Month', type: 'month' }, { label: 'Total Amount (₹)', type: 'number' }].map(({ label, type }) => (
-            <div key={label}><label className="text-xs text-slate-400 mb-1 block">{label}</label><input type={type} className="input-field" /></div>
-          ))}
-          <div><label className="text-xs text-slate-400 mb-1 block">Reason</label><textarea rows={2} className="input-field resize-none" /></div>
-          <div className="flex gap-3">
-            <button onClick={() => { setManualModal(false); addToast('Manual invoice created', 'success') }} className="btn-primary flex-1 justify-center">Create Invoice</button>
-            <button onClick={() => setManualModal(false)} className="btn-ghost flex-1 justify-center">Cancel</button>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Reason *</label>
+            <textarea value={adjustReason} onChange={e => setAdjustReason(e.target.value)}
+              placeholder="Why is this adjustment being made?" rows={2} className="input-field w-full resize-none text-sm" />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleAdjust} disabled={adjusting || !adjustReason.trim() || !adjustAmount}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+              {adjusting ? <><Loader2 size={13} className="animate-spin" /> Adjusting...</> : 'Apply Adjustment'}
+            </button>
+            <button onClick={() => setAdjModal(null)} className="btn-ghost flex-1 justify-center">Cancel</button>
           </div>
         </div>
       </Modal>

@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api'
+// Backend runs on 3001. Admin routes are at /admin/... (NOT /api/admin/...)
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -8,7 +9,6 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach JWT to every request automatically
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('zyntell_admin_token')
@@ -18,7 +18,6 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Handle 401 globally — redirect to login
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {

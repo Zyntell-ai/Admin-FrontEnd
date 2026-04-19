@@ -1,198 +1,212 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
-import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { commissions } from '../data/mockData'
-import { Download, CheckCircle, Zap, User, X } from 'lucide-react'
+import { getRevenue } from '../api/admin'
+import { Download, RefreshCw, AlertCircle, TrendingUp, DollarSign, Zap, Users } from 'lucide-react'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell
+} from 'recharts'
 import clsx from 'clsx'
 
-const CATEGORIES = ['All', 'Healthcare', 'Restaurant', 'Real Estate', 'Beauty']
-const STATUSES = ['All', 'PENDING', 'CONFIRMED', 'DISPUTED', 'WAIVED']
+const TYPE_COLORS = { BOOKING: '#4F46E5', SHOWUP: '#6EE7B7', LEAD: '#D4AF37' }
+const CATEGORY_COLORS = ['#4F46E5', '#818CF8', '#D4AF37', '#6EE7B7', '#94A3B8']
 
-function TypeBadge({ type }) {
-  const map = { SHOWUP: 'badge-green', BOOKING: 'badge-indigo', LEAD: 'badge-yellow', ADJUSTMENT: 'badge-gray' }
-  return <span className={clsx('badge text-[10px]', map[type])}>{type}</span>
-}
-
-function StatusBadge({ status }) {
-  const map = { CONFIRMED: 'badge-green', PENDING: 'badge-indigo', DISPUTED: 'badge-red', WAIVED: 'badge-gray' }
-  return <span className={clsx('badge text-[10px]', map[status])}>{status}</span>
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="card px-3 py-2 text-xs">
+      <p className="text-slate-400 mb-1">{label}</p>
+      {payload.map((p, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="text-slate-300">{p.name}:</span>
+          <span className="text-white font-semibold">₹{p.value.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function Commissions() {
   const { addToast } = useToast()
-  const [activeCategory, setActiveCategory] = useState('All')
-  const [statusFilter, setStatusFilter] = useState('All')
-  const [commList, setCommList] = useState(commissions)
-  const [disputeModal, setDisputeModal] = useState(null)
-  const [disputeNote, setDisputeNote] = useState('')
+  const [revenue, setRevenue] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const filtered = useMemo(() => {
-    let rows = activeCategory === 'All' ? commList : commList.filter(c => c.category === activeCategory)
-    if (statusFilter !== 'All') rows = rows.filter(c => c.status === statusFilter)
-    return rows
-  }, [commList, activeCategory, statusFilter])
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await getRevenue()
+      setRevenue(data)
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to load commission data'
+      setError(msg)
+      addToast(msg, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [])                        // ← empty array, addToast removed
 
-  const totals = useMemo(() => filtered.reduce((acc, c) => {
-    acc.total += c.amount
-    if (c.status === 'CONFIRMED') acc.confirmed += c.amount
-    if (c.status === 'PENDING') acc.pending += c.amount
-    if (c.status === 'DISPUTED') acc.disputed += c.amount
-    return acc
-  }, { total: 0, confirmed: 0, pending: 0, disputed: 0 }), [filtered])
+  useEffect(() => { fetchData() }, [fetchData])
 
-  const confirmComm = (id, bizName) => {
-    setCommList(prev => prev.map(c => c.id === id ? { ...c, status: 'CONFIRMED' } : c))
-    addToast(`Commission confirmed — ${bizName}`, 'success')
+  if (loading) {
+    return (
+      <Layout title="Commissions">
+        <div className="grid grid-cols-3 gap-4 mb-6">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="card p-4 animate-pulse h-24" />)}</div>
+        <div className="card p-4 animate-pulse h-64" />
+      </Layout>
+    )
   }
 
-  const waiveComm = (id, bizName) => {
-    setCommList(prev => prev.map(c => c.id === id ? { ...c, status: 'WAIVED' } : c))
-    addToast(`Commission waived — ${bizName}`, 'warning')
+  if (error && !revenue) {
+    return (
+      <Layout title="Commissions">
+        <div className="card p-12 text-center">
+          <AlertCircle size={32} className="text-red-400 mx-auto mb-3" />
+          <p className="text-sm text-white mb-1">Failed to load commissions</p>
+          <p className="text-xs text-slate-500 mb-4">{error}</p>
+          <button onClick={fetchData} className="btn-primary mx-auto"><RefreshCw size={13} /> Retry</button>
+        </div>
+      </Layout>
+    )
   }
 
-  const resolveDispute = (id) => {
-    setCommList(prev => prev.map(c => c.id === id ? { ...c, status: 'CONFIRMED' } : c))
-    addToast('Dispute resolved — Commission confirmed', 'success')
-    setDisputeModal(null)
-    setDisputeNote('')
-  }
+  const byMonth = revenue?.byMonth || []
+  const byCategory = revenue?.byCategory || []
+  const byType = revenue?.byType || {}
+  const currentMrr = revenue?.currentMrr || 0
 
-  const confirmAll = () => {
-    const pendingCount = commList.filter(c => c.status === 'PENDING').length
-    setCommList(prev => prev.map(c => c.status === 'PENDING' ? { ...c, status: 'CONFIRMED' } : c))
-    addToast(`${pendingCount} commissions confirmed`, 'success')
-  }
+  const totalCommissions = (byType.BOOKING || 0) + (byType.SHOWUP || 0) + (byType.LEAD || 0)
 
-  const confirmRate = Math.round((commList.filter(c => c.status === 'CONFIRMED').length / commList.length) * 100)
+  const typePieData = Object.entries(byType)
+    .filter(([, v]) => v > 0)
+    .map(([key, value]) => ({ name: key, value, color: TYPE_COLORS[key] || '#94A3B8' }))
 
   return (
     <Layout title="Commissions">
-      <div className="flex items-center justify-between mb-5">
-        <div><h1 className="page-title mb-0.5">Commissions</h1><p className="text-sm text-slate-500">Track, verify, and manage all commission events</p></div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="page-title mb-0.5">Commission Revenue</h1>
+          <p className="text-sm text-slate-500">Aggregate commission data from all confirmed transactions</p>
+        </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => addToast('CSV exported', 'success')} className="btn-ghost"><Download size={13} /> Export</button>
-          <button onClick={confirmAll} className="btn-primary">Confirm All Pending</button>
+          <button onClick={fetchData} className="btn-ghost gap-1.5"><RefreshCw size={13} /> Refresh</button>
+          <button onClick={() => addToast('CSV export started', 'success')} className="btn-ghost"><Download size={13} /> Export</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-5">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Commission', value: `₹${totals.total.toLocaleString()}`, color: 'metric-gold', gold: true },
-          { label: 'Confirmed', value: `₹${totals.confirmed.toLocaleString()}`, color: 'text-emerald-400' },
-          { label: 'Pending', value: `₹${totals.pending.toLocaleString()}`, color: 'text-indigo-400' },
-          { label: 'Disputed', value: `₹${totals.disputed.toLocaleString()}`, color: 'text-red-400' },
-        ].map(({ label, value, color, gold }) => (
-          <div key={label} className={clsx('card p-5', gold && 'border-gold/15')}>
-            <p className="stat-label mb-1">{label}</p>
-            <p className={clsx('text-2xl font-bold font-display', color)}>{value}</p>
+          { label: 'Total Commissions', value: `₹${totalCommissions.toLocaleString()}`, icon: DollarSign, color: 'metric-gold', gold: true },
+          { label: 'Booking Commissions', value: `₹${(byType.BOOKING || 0).toLocaleString()}`, icon: Zap, color: 'text-indigo-400' },
+          { label: 'Showup Commissions', value: `₹${(byType.SHOWUP || 0).toLocaleString()}`, icon: TrendingUp, color: 'text-emerald-400' },
+          { label: 'Lead Commissions', value: `₹${(byType.LEAD || 0).toLocaleString()}`, icon: Users, color: 'text-amber-400' },
+        ].map(({ label, value, icon: Icon, color, gold }) => (
+          <div key={label} className={clsx('card p-5', gold && 'border-gold/20')}>
+            <div className="flex items-center gap-2 mb-2">
+              <Icon size={13} className={color} />
+              <span className="stat-label">{label}</span>
+            </div>
+            <p className={clsx('stat-value', color)}>{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="card p-4 mb-5 flex items-center gap-5">
-        <CheckCircle size={20} className="text-emerald-400 flex-shrink-0" />
-        <div className="flex-1">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-xs text-slate-400 font-medium">Overall Confirmation Rate</p>
-            <p className="text-sm font-bold text-white">{confirmRate}%</p>
+      {/* MRR Banner */}
+      <div className="card p-4 mb-6 flex items-center gap-4">
+        <div>
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Current MRR (Plan Subscriptions)</p>
+          <p className="text-2xl font-bold font-display text-white">₹{currentMrr.toLocaleString()}</p>
+        </div>
+        <div className="flex-1" />
+        <div className="text-right">
+          <p className="text-xs text-slate-500 mb-1">Total including MRR</p>
+          <p className="text-2xl font-bold font-display metric-gold">₹{(totalCommissions + currentMrr).toLocaleString()}</p>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-12 gap-5 mb-6">
+        {/* Revenue by Month */}
+        <div className="col-span-8 card p-5">
+          <h3 className="section-title mb-4">Commission Trend (Monthly)</h3>
+          {byMonth.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byMonth} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="month" tick={{ fill: '#64748B', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#64748B', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="booking" name="Booking" fill="#4F46E5" radius={[2, 2, 0, 0]} stackId="a" />
+                <Bar dataKey="showup" name="Showup" fill="#6EE7B7" radius={[2, 2, 0, 0]} stackId="a" />
+                <Bar dataKey="lead" name="Lead" fill="#D4AF37" radius={[2, 2, 0, 0]} stackId="a" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex items-center justify-center text-slate-500 text-sm">No monthly data yet</div>
+          )}
+          <div className="flex gap-4 mt-2">
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-indigo-500" /><span className="text-xs text-slate-500">Booking</span></div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-emerald-400" /><span className="text-xs text-slate-500">Showup</span></div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-gold" /><span className="text-xs text-slate-500">Lead</span></div>
           </div>
-          <div className="bg-white/5 rounded-full h-2"><div className="bg-gradient-indigo h-2 rounded-full transition-all duration-700" style={{ width: `${confirmRate}%` }} /></div>
         </div>
-        <p className="text-xs text-slate-500 flex-shrink-0">{commList.filter(c => c.status === 'CONFIRMED').length} of {commList.length}</p>
-      </div>
 
-      <div className="flex items-center justify-between mb-0">
-        <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.06] rounded-lg p-1">
-          {STATUSES.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={clsx('px-3 py-1.5 rounded-md text-[10px] font-medium transition-all', statusFilter === s ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white')}>{s}</button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-0 border-b border-white/[0.06] mt-3">
-        {CATEGORIES.map(cat => (
-          <button key={cat} onClick={() => setActiveCategory(cat)}
-            className={clsx('px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px', activeCategory === cat ? 'text-white border-indigo-500 bg-indigo-500/5' : 'text-slate-400 border-transparent hover:text-slate-200')}>
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-white/[0.06]">
-              {['Business', 'Category', 'Type', 'Amount', 'Status', 'Triggered By', 'Signal Score', 'Date', 'Invoice', 'Actions'].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((c) => (
-              <tr key={c.id} className="border-b border-white/[0.04] table-row-hover">
-                <td className="px-4 py-3 text-sm font-semibold text-white">{c.businessName}</td>
-                <td className="px-4 py-3"><span className="badge badge-indigo text-[10px]">{c.category}</span></td>
-                <td className="px-4 py-3"><TypeBadge type={c.type} /></td>
-                <td className="px-4 py-3"><span className={clsx('font-bold font-display text-sm', c.status === 'CONFIRMED' ? 'metric-gold' : 'text-white')}>₹{c.amount}</span></td>
-                <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
-                    {['BOT', 'GPS', 'OTP'].includes(c.triggeredBy) ? <Zap size={12} className="text-indigo-400" /> : <User size={12} className="text-amber-400" />}
-                    <span className="text-xs text-slate-400">{c.triggeredBy}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  {c.signalScore != null ? (
+        {/* By Type Pie */}
+        <div className="col-span-4 card p-5">
+          <h3 className="section-title mb-3">By Commission Type</h3>
+          {typePieData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={typePieData} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+                    {typePieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: '#0F1629', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={v => [`₹${v.toLocaleString()}`, '']} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2 mt-2">
+                {typePieData.map(d => (
+                  <div key={d.name} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <div className="w-12 bg-white/5 rounded-full h-1.5"><div className={clsx('h-1.5 rounded-full', c.signalScore >= 130 ? 'bg-emerald-500' : c.signalScore >= 80 ? 'bg-indigo-500' : 'bg-amber-500')} style={{ width: `${(c.signalScore / 175) * 100}%` }} /></div>
-                      <span className={clsx('text-xs font-bold', c.signalScore >= 130 ? 'text-emerald-400' : c.signalScore >= 80 ? 'text-indigo-400' : 'text-amber-400')}>{c.signalScore}</span>
+                      <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
+                      <span className="text-slate-400">{d.name}</span>
                     </div>
-                  ) : <span className="text-slate-600 text-xs">—</span>}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-400">{c.createdAt}</td>
-                <td className="px-4 py-3 text-xs">{c.invoiceId ? <span className="text-emerald-400 font-mono">{c.invoiceId}</span> : <span className="text-amber-400 font-medium">Unbilled</span>}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    {c.status === 'PENDING' && (
-                      <button onClick={() => confirmComm(c.id, c.businessName)} className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 px-2 py-1 rounded-md transition-all">Confirm</button>
-                    )}
-                    {c.status === 'DISPUTED' && (
-                      <button onClick={() => setDisputeModal(c)} className="text-[10px] bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 px-2 py-1 rounded-md transition-all">Resolve</button>
-                    )}
-                    {c.status === 'CONFIRMED' && (
-                      <button onClick={() => waiveComm(c.id, c.businessName)} className="text-[10px] btn-ghost px-2 py-1">Waive</button>
-                    )}
-                    <button className="text-[10px] btn-ghost px-2 py-1">Details</button>
+                    <span className="text-white font-medium">₹{d.value.toLocaleString()}</span>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length === 0 && <div className="py-8 text-center text-sm text-slate-500">No commissions match the current filters</div>}
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">No data yet</div>
+          )}
+        </div>
       </div>
 
-      <Modal open={!!disputeModal} onClose={() => setDisputeModal(null)} title="Resolve Dispute">
-        {disputeModal && (
-          <div className="space-y-4">
-            <div className="bg-white/[0.04] rounded-lg p-4 border border-white/[0.08]">
-              <p className="text-sm font-semibold text-white">{disputeModal.businessName}</p>
-              <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
-                <span>Type: <span className="text-white">{disputeModal.type}</span></span>
-                <span>Amount: <span className="text-white font-semibold">₹{disputeModal.amount}</span></span>
-                <span>Score: <span className="text-white">{disputeModal.signalScore}/175</span></span>
-              </div>
-            </div>
-            <div><label className="text-xs text-slate-400 mb-1 block">Resolution Notes</label><textarea value={disputeNote} onChange={e => setDisputeNote(e.target.value)} rows={3} placeholder="Describe how the dispute was resolved..." className="input-field resize-none" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => resolveDispute(disputeModal.id)} className="flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 px-4 py-2.5 rounded-lg text-sm font-medium transition-all"><CheckCircle size={14} /> Confirm Commission</button>
-              <button onClick={() => { waiveComm(disputeModal.id, disputeModal.businessName); setDisputeModal(null) }} className="flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 px-4 py-2.5 rounded-lg text-sm font-medium transition-all"><X size={14} /> Waive</button>
-            </div>
-            <button onClick={() => setDisputeModal(null)} className="btn-ghost w-full justify-center">Cancel</button>
+      {/* By Category Table */}
+      {byCategory.length > 0 && (
+        <div className="card p-5">
+          <h3 className="section-title mb-4">Commission by Category</h3>
+          <div className="space-y-3">
+            {byCategory.sort((a, b) => b.total - a.total).map(({ category, total }, i) => {
+              const maxTotal = byCategory[0]?.total || 1
+              return (
+                <div key={category} className="flex items-center gap-4">
+                  <span className="text-xs text-white w-32 truncate">{category}</span>
+                  <div className="flex-1 bg-white/5 rounded-full h-2">
+                    <div className="h-2 rounded-full" style={{ width: `${(total / maxTotal) * 100}%`, background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+                  </div>
+                  <span className="text-xs font-semibold text-white w-24 text-right">₹{total.toLocaleString()}</span>
+                </div>
+              )
+            })}
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
     </Layout>
   )
 }

@@ -1,45 +1,31 @@
-import apiClient from './client.js'
+// NOTE: The current backend does not expose admin user CRUD endpoints.
+// Admin accounts are created via the seed script: node createAdmin.js
+// Settings.jsx shows a banner explaining this gracefully.
 
-// ── Get all admin users ──────────────────────────────────────────────────────
 export async function getAdminUsers() {
-  const res = await apiClient.get('/admin-users')
-  return res.data
+  return { admins: [], message: 'Admin user management not available in current backend.' }
 }
 
-// ── Invite new admin ─────────────────────────────────────────────────────────
-export async function inviteAdmin({ name, email, mobile, role, permissions }) {
-  const res = await apiClient.post('/admin-users/invite', {
-    name, email, mobile, role, permissions,
-  })
-  return res.data
+export async function inviteAdmin() {
+  throw new Error('Admin invite not available in current backend.')
 }
 
-// ── Send OTP ─────────────────────────────────────────────────────────────────
-export async function sendOtp(type, value) {
-  const res = await apiClient.post('/admin-users/send-otp', { type, value })
-  return res.data
+export async function sendOtp() {
+  throw new Error('OTP service not available in current backend.')
 }
 
-// ── Verify OTP ───────────────────────────────────────────────────────────────
-export async function verifyOtp(value, otp) {
-  const res = await apiClient.post('/admin-users/verify-otp', { value, otp })
-  return res.data
+export async function verifyOtp() {
+  throw new Error('OTP verification not available in current backend.')
 }
 
-// ── Update permissions ───────────────────────────────────────────────────────
-export async function updatePermissions(adminId, permissions) {
-  const res = await apiClient.patch(`/admin-users/${adminId}/permissions`, { permissions })
-  return res.data
+export async function updatePermissions() {
+  throw new Error('Permission update not available in current backend.')
 }
 
-// ── Update admin (role, name, isActive) ─────────────────────────────────────
-export async function updateAdmin(adminId, updates) {
-  const res = await apiClient.patch(`/admin-users/${adminId}`, updates)
-  return res.data
+export async function updateAdmin() {
+  throw new Error('Admin update not available in current backend.')
 }
 
-// ── Delete admin ─────────────────────────────────────────────────────────────
-export async function deleteAdmin(adminId) {
-  const res = await apiClient.delete(`/admin-users/${adminId}`)
-  return res.data
+export async function deleteAdmin() {
+  throw new Error('Admin delete not available in current backend.')
 }
