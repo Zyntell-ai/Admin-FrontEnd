@@ -1,391 +1,493 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import { loginApi } from '../api/auth'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
 
-/* ─────────────────────────────────────────
-   SPIKE GEOMETRY
-   20 spikes positioned around an ellipse
-   rx = approx half-width, ry = half-height
-───────────────────────────────────────── */
-const SPIKES = Array.from({ length: 20 }, (_, i) => {
-  const angle = (i / 20) * Math.PI * 2
-  return {
-    ex      : 196 * Math.cos(angle),
-    ey      : 252 * Math.sin(angle),
-    rot     : (i / 20) * 360 + 90,
-    h       : 10 + Math.random() * 16,
-    w       : 2  + Math.random() * 2.5,
-    delay   : Math.random() * 4,
-    duration: 1.8 + Math.random() * 2.4,
-  }
-})
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@300;400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-/* ─── Bolt icon ─── */
+/* ── Stained glass panel shimmer ── */
+@keyframes panelPulse{
+  0%,100%{opacity:var(--base,0.28)}
+  50%{opacity:calc(var(--base,0.28)*1.45)}
+}
+/* ── Light ray drift ── */
+@keyframes rayDrift{
+  0%,100%{transform:skewX(-6deg) translateX(0);opacity:0.18}
+  50%{transform:skewX(4deg) translateX(22px);opacity:0.32}
+}
+/* ── Liquid metal blob morph ── */
+@keyframes morphA{
+  0%,100%{border-radius:54% 46% 60% 40%/44% 58% 42% 56%}
+  33%{border-radius:40% 60% 44% 56%/60% 38% 58% 42%}
+  66%{border-radius:58% 42% 50% 50%/40% 56% 52% 48%}
+}
+@keyframes morphB{
+  0%,100%{border-radius:46% 54% 52% 48%/58% 42% 60% 40%}
+  40%{border-radius:60% 40% 46% 54%/40% 60% 42% 58%}
+  70%{border-radius:48% 52% 58% 42%/52% 46% 56% 44%}
+}
+@keyframes morphC{
+  0%,100%{border-radius:52% 48% 44% 56%/46% 52% 56% 44%}
+  50%{border-radius:44% 56% 58% 42%/58% 44% 46% 54%}
+}
+/* ── Blob drifts ── */
+@keyframes driftA{
+  0%,100%{transform:translate(0,0)}
+  35%{transform:translate(40px,-28px)}
+  68%{transform:translate(-22px,34px)}
+}
+@keyframes driftB{
+  0%,100%{transform:translate(0,0)}
+  42%{transform:translate(-50px,22px)}
+  72%{transform:translate(28px,-38px)}
+}
+@keyframes driftC{
+  0%,100%{transform:translate(0,0)}
+  50%{transform:translate(32px,28px)}
+}
+/* ── Metal iridescent sweep ── */
+@keyframes iridSweep{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+/* ── Ferrofluid border morph ── */
+@keyframes ferroBR{
+  0%,100%{border-radius:18px}
+  16%{border-radius:20px 16px 19px 17px}
+  32%{border-radius:16px 20px 17px 21px}
+  48%{border-radius:21px 17px 20px 16px}
+  64%{border-radius:17px 21px 16px 20px}
+  80%{border-radius:19px 15px 21px 17px}
+}
+/* ── Ferrofluid glow pulse ── */
+@keyframes ferroGlow{
+  0%,100%{opacity:0.6;filter:blur(14px)}
+  50%{opacity:1;filter:blur(10px)}
+}
+/* ── Ferrofluid border sweep ── */
+@keyframes ferroBorderSweep{
+  0%{background-position:0% 0%}
+  50%{background-position:100% 100%}
+  100%{background-position:0% 0%}
+}
+/* ── Logo rings ── */
+@keyframes ringCW{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes ringCCW{from{transform:rotate(0deg)}to{transform:rotate(-360deg)}}
+@keyframes logoPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(160,130,240,0.35)}
+  60%{box-shadow:0 0 0 12px rgba(160,130,240,0)}
+}
+/* ── Entrance ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+/* ── Input scan ── */
+@keyframes scanBeam{from{transform:translateX(-100%)}to{transform:translateX(500%)}}
+/* ── Error shake ── */
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+/* ── Spinner ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ══════════════════════════════
+   ROOT
+══════════════════════════════ */
+.lr{
+  min-height:100vh;
+  background:#06040f;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'DM Sans',sans-serif;
+  overflow:hidden;position:relative;padding:24px;
+}
+
+/* ══════════════════════════════
+   LAYER 1 — STAINED GLASS
+   Full background tiling with
+   real geometric jewel panels
+══════════════════════════════ */
+.glass-bg{
+  position:absolute;inset:0;pointer-events:none;
+  overflow:hidden;
+}
+.glass-svg{
+  position:absolute;inset:0;width:100%;height:100%;
+}
+/* Light rays cutting through panels */
+.ray{
+  position:absolute;top:0;bottom:0;
+  pointer-events:none;
+  animation:rayDrift ease-in-out infinite;
+}
+
+/* ══════════════════════════════
+   LAYER 2 — LIQUID METAL
+   Large iridescent chrome blobs
+══════════════════════════════ */
+.metal-layer{
+  position:absolute;inset:0;pointer-events:none;overflow:hidden;
+}
+.mblob{
+  position:absolute;
+  filter:blur(60px);
+  mix-blend-mode:screen;
+}
+.mb1{
+  width:560px;height:460px;top:-140px;left:-120px;
+  background:radial-gradient(ellipse at 42% 42%,
+    rgba(210,195,255,0.28) 0%,
+    rgba(150,100,230,0.16) 40%,
+    rgba(80,40,180,0.08) 65%,
+    transparent 80%);
+  animation:morphA 18s ease-in-out infinite, driftA 26s ease-in-out infinite;
+}
+.mb2{
+  width:480px;height:400px;bottom:-120px;right:-100px;
+  background:radial-gradient(ellipse at 56% 48%,
+    rgba(200,220,255,0.22) 0%,
+    rgba(120,80,210,0.14) 40%,
+    rgba(60,30,160,0.07) 65%,
+    transparent 80%);
+  animation:morphB 22s ease-in-out infinite 5s, driftB 30s ease-in-out infinite;
+}
+.mb3{
+  width:340px;height:300px;top:35%;left:45%;
+  background:radial-gradient(ellipse at 50% 50%,
+    rgba(255,240,210,0.14) 0%,
+    rgba(200,150,80,0.08) 45%,
+    transparent 70%);
+  animation:morphC 26s ease-in-out infinite 8s, driftC 20s ease-in-out infinite;
+}
+/* Iridescent chrome surface shimmer */
+.msheen{
+  position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(
+    112deg,
+    transparent 0%,
+    rgba(190,180,240,0.04) 28%,
+    rgba(230,220,255,0.07) 50%,
+    rgba(190,180,240,0.04) 72%,
+    transparent 100%
+  );
+  background-size:300% 300%;
+  animation:iridSweep 14s ease infinite;
+}
+
+/* ══════════════════════════════
+   CARD WRAPPER + FERROFLUID
+══════════════════════════════ */
+.card-wrap{
+  position:relative;z-index:10;
+  width:100%;max-width:420px;
+  animation:fadeUp 0.8s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* Ferrofluid outer diffuse aura */
+.ferro-aura{
+  position:absolute;inset:-12px;pointer-events:none;
+  background:linear-gradient(
+    135deg,
+    rgba(140,100,240,0.22) 0%,
+    rgba(80,50,180,0.16) 30%,
+    rgba(30,15,80,0.08) 55%,
+    rgba(80,50,180,0.16) 75%,
+    rgba(140,100,240,0.22) 100%
+  );
+  background-size:250% 250%;
+  border-radius:24px;
+  animation:ferroBR 9s ease-in-out infinite, ferroGlow 5s ease-in-out infinite, ferroBorderSweep 7s linear infinite;
+  z-index:0;
+}
+/* Ferrofluid crisp border ring */
+.ferro-ring{
+  position:absolute;inset:-1px;pointer-events:none;
+  background:linear-gradient(
+    135deg,
+    rgba(180,150,255,0.7) 0%,
+    rgba(100,70,200,0.5) 20%,
+    rgba(50,30,120,0.3) 40%,
+    rgba(180,150,255,0.15) 50%,
+    rgba(50,30,120,0.3) 60%,
+    rgba(100,70,200,0.5) 80%,
+    rgba(180,150,255,0.7) 100%
+  );
+  background-size:300% 300%;
+  border-radius:19px;
+  animation:ferroBR 9s ease-in-out infinite, ferroBorderSweep 6s linear infinite;
+  z-index:0;
+}
+
+/* ── CARD INNER ── */
+.card{
+  position:relative;z-index:1;
+  background:rgba(8,6,18,0.92);
+  backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,0.06);
+  padding:42px 38px 38px;
+  overflow:hidden;
+}
+/* Top glass highlight edge */
+.card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,
+    transparent,
+    rgba(255,255,255,0.12) 30%,
+    rgba(255,255,255,0.22) 50%,
+    rgba(255,255,255,0.12) 70%,
+    transparent);
+  pointer-events:none;
+}
+/* Subtle stained glass colour leak into card corners */
+.card::after{
+  content:'';position:absolute;inset:0;border-radius:18px;pointer-events:none;
+  background:
+    radial-gradient(ellipse at 0% 0%,   rgba(100,10,30,0.10) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 0%,  rgba(10,25,110,0.09) 0%, transparent 50%),
+    radial-gradient(ellipse at 0% 100%,  rgba(60,8,100,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 100%,rgba(10,80,30,0.07) 0%, transparent 50%);
+}
+
+/* ══════════════════════════════
+   LOGO
+══════════════════════════════ */
+.logo-area{
+  display:flex;flex-direction:column;align-items:center;
+  margin-bottom:32px;
+  animation:fadeIn 0.7s ease 0.2s both;
+}
+.logo-icon-wrap{position:relative;width:58px;height:58px;margin-bottom:16px}
+.ring-outer{
+  position:absolute;inset:-8px;border-radius:50%;
+  border:1px solid rgba(160,130,240,0.25);
+  animation:ringCW 20s linear infinite;
+}
+.ring-outer::before{
+  content:'';position:absolute;top:-3px;left:50%;transform:translateX(-50%);
+  width:6px;height:6px;border-radius:50%;
+  background:rgba(160,130,240,0.8);
+  box-shadow:0 0 8px rgba(160,130,240,0.6),0 0 16px rgba(160,130,240,0.3);
+}
+.ring-inner{
+  position:absolute;inset:-2px;border-radius:50%;
+  border:1px dashed rgba(160,130,240,0.14);
+  animation:ringCCW 13s linear infinite;
+}
+.logo-icon-box{
+  width:58px;height:58px;border-radius:15px;
+  background:linear-gradient(145deg,#110e24,#1e1540);
+  border:1px solid rgba(160,130,240,0.22);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;z-index:1;
+  animation:logoPulse 3.8s ease-in-out infinite;
+}
+.brand-name{
+  font-size:21px;font-weight:600;letter-spacing:0.20em;
+  background:linear-gradient(90deg,#d0c0f8 0%,#fff 45%,#d0c0f8 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  display:block;margin-bottom:5px;
+}
+.brand-sub{
+  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.34em;
+  color:rgba(160,130,240,0.40);text-transform:uppercase;
+}
+
+/* ══════════════════════════════
+   DIVIDER
+══════════════════════════════ */
+.divider{
+  display:flex;align-items:center;gap:12px;margin-bottom:26px;
+  animation:fadeIn 0.5s ease 0.3s both;
+}
+.div-line{flex:1;height:1px;background:rgba(255,255,255,0.07)}
+.div-text{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:rgba(255,255,255,0.22);letter-spacing:0.14em;white-space:nowrap;
+}
+
+/* ══════════════════════════════
+   ERROR
+══════════════════════════════ */
+.err-box{
+  background:rgba(160,20,50,0.10);
+  border:1px solid rgba(180,35,65,0.25);
+  border-radius:10px;padding:11px 14px;
+  display:flex;gap:10px;align-items:flex-start;
+  margin-bottom:20px;animation:shake 0.4s ease;
+}
+.err-dot{width:5px;height:5px;border-radius:50%;background:#c03050;flex-shrink:0;margin-top:5px}
+.err-msg{font-size:12px;color:rgba(220,130,148,0.9);line-height:1.55;font-weight:400}
+
+/* ══════════════════════════════
+   FORM
+══════════════════════════════ */
+.fields{display:flex;flex-direction:column;gap:18px}
+.fg{animation:fadeUp 0.5s ease both}
+.fg:nth-child(1){animation-delay:0.34s}
+.fg:nth-child(2){animation-delay:0.42s}
+.flabel{
+  display:block;font-size:11px;font-weight:500;letter-spacing:0.06em;
+  color:rgba(255,255,255,0.38);margin-bottom:7px;text-transform:uppercase;
+}
+.fi-wrap{position:relative}
+.fi{
+  width:100%;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.09);
+  border-radius:10px;padding:12px 15px;
+  color:#fff;font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:400;outline:none;
+  transition:border-color 0.2s,background 0.2s,box-shadow 0.2s;
+}
+.fi::placeholder{color:rgba(255,255,255,0.18);font-weight:300}
+.fi:focus{
+  border-color:rgba(150,120,230,0.55);
+  background:rgba(150,120,230,0.05);
+  box-shadow:0 0 0 3px rgba(150,120,230,0.10);
+}
+.fi.err{border-color:rgba(180,35,65,0.48);box-shadow:0 0 0 3px rgba(180,35,65,0.08)}
+.fi.eye{padding-right:44px}
+/* Purple scan sweep on focus */
+.sw{position:absolute;inset:0;border-radius:10px;overflow:hidden;pointer-events:none}
+.sb{position:absolute;top:0;bottom:0;width:38px;opacity:0;background:linear-gradient(90deg,transparent,rgba(150,120,230,0.18),transparent)}
+.fi:focus~.sw .sb{opacity:1;animation:scanBeam 0.85s ease forwards}
+.eye-btn{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;padding:4px;
+  color:rgba(255,255,255,0.24);display:flex;align-items:center;transition:color 0.15s;
+}
+.eye-btn:hover{color:rgba(150,120,230,0.75)}
+.ferr{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(210,110,128,0.9);margin-top:6px}
+.ferr-dot{width:3px;height:3px;border-radius:50%;background:rgba(200,80,100,0.8);flex-shrink:0}
+
+/* ══════════════════════════════
+   SUBMIT BUTTON
+══════════════════════════════ */
+.sub-wrap{margin-top:26px;animation:fadeUp 0.5s ease 0.5s both}
+.sub-btn{
+  width:100%;padding:13px 24px;border:none;border-radius:10px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;letter-spacing:0.04em;
+  position:relative;overflow:hidden;
+  transition:transform 0.15s,box-shadow 0.15s;
+}
+.sub-btn:not(:disabled){
+  background:linear-gradient(135deg,#5530a8 0%,#7850c8 45%,#4a28a0 100%);
+  color:#fff;
+  box-shadow:0 2px 20px rgba(100,70,200,0.35),inset 0 1px 0 rgba(255,255,255,0.10);
+}
+.sub-btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(100,70,200,0.48),inset 0 1px 0 rgba(255,255,255,0.10)}
+.sub-btn:not(:disabled):active{transform:scale(0.99)}
+.sub-btn:disabled{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.22);cursor:not-allowed}
+.sub-btn::before{content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);transition:left 0.5s}
+.sub-btn:not(:disabled):hover::before{left:160%}
+.sub-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.07) 0%,transparent 60%);border-radius:inherit;pointer-events:none}
+.btn-c{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:8px}
+
+/* ══════════════════════════════
+   CARD FOOTER
+══════════════════════════════ */
+.cfoot{
+  margin-top:26px;padding-top:18px;
+  border-top:1px solid rgba(255,255,255,0.05);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  animation:fadeIn 0.5s ease 0.65s both;
+}
+.cfoot-icon{color:rgba(150,120,230,0.32);flex-shrink:0}
+.cfoot-text{font-size:11px;color:rgba(255,255,255,0.18);font-weight:300;text-align:center}
+
+/* ══════════════════════════════
+   PAGE FOOTER
+══════════════════════════════ */
+.pfooter{
+  position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:rgba(255,255,255,0.10);white-space:nowrap;letter-spacing:0.10em;
+}
+`
+
+/* ─── SVG stained glass panels that fill the whole background ─── */
+function StainedGlassBg () {
+  return (
+    <svg
+      className="glass-svg"
+      viewBox="0 0 1440 900"
+      preserveAspectRatio="xMidYMid slice"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        {/* Jewel-tone gradients for each panel */}
+        <radialGradient id="g-ruby"    cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#8b0c22" stopOpacity="0.55"/><stop offset="100%" stopColor="#4a0410" stopOpacity="0"/></radialGradient>
+        <radialGradient id="g-sapph"   cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#0c1e8a" stopOpacity="0.45"/><stop offset="100%" stopColor="#050d40" stopOpacity="0"/></radialGradient>
+        <radialGradient id="g-emer"    cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#0a5c28" stopOpacity="0.40"/><stop offset="100%" stopColor="#042414" stopOpacity="0"/></radialGradient>
+        <radialGradient id="g-ameth"   cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#5a0c88" stopOpacity="0.48"/><stop offset="100%" stopColor="#280540" stopOpacity="0"/></radialGradient>
+        <radialGradient id="g-amber"   cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#8a5c04" stopOpacity="0.40"/><stop offset="100%" stopColor="#3a2402" stopOpacity="0"/></radialGradient>
+        <radialGradient id="g-teal"    cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#045a6a" stopOpacity="0.42"/><stop offset="100%" stopColor="#022430" stopOpacity="0"/></radialGradient>
+        <radialGradient id="g-crimson" cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#7a0830" stopOpacity="0.50"/><stop offset="100%" stopColor="#380414" stopOpacity="0"/></radialGradient>
+        <radialGradient id="g-indigo"  cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#1c0c7a" stopOpacity="0.44"/><stop offset="100%" stopColor="#0a0538" stopOpacity="0"/></radialGradient>
+      </defs>
+
+      {/* ── Panel fill polygons ── */}
+      {/* Row 1 */}
+      <polygon points="0,0 360,0 320,220 0,200"           fill="url(#g-ruby)"    style={{animation:'panelPulse 10s ease-in-out infinite 0s',    '--base':0.32}} />
+      <polygon points="360,0 780,0 740,230 320,220"        fill="url(#g-sapph)"   style={{animation:'panelPulse 13s ease-in-out infinite 1.5s',  '--base':0.28}} />
+      <polygon points="780,0 1160,0 1120,215 740,230"      fill="url(#g-emer)"    style={{animation:'panelPulse 11s ease-in-out infinite 3s',    '--base':0.26}} />
+      <polygon points="1160,0 1440,0 1440,200 1120,215"    fill="url(#g-ameth)"   style={{animation:'panelPulse 14s ease-in-out infinite 0.8s',  '--base':0.30}} />
+      {/* Row 2 */}
+      <polygon points="0,200 320,220 275,460 0,440"        fill="url(#g-ameth)"   style={{animation:'panelPulse 12s ease-in-out infinite 2s',    '--base':0.26}} />
+      <polygon points="320,220 740,230 700,465 275,460"    fill="url(#g-amber)"   style={{animation:'panelPulse 9s  ease-in-out infinite 4s',    '--base':0.28}} />
+      <polygon points="740,230 1120,215 1090,455 700,465"  fill="url(#g-ruby)"    style={{animation:'panelPulse 15s ease-in-out infinite 1s',    '--base':0.24}} />
+      <polygon points="1120,215 1440,200 1440,440 1090,455"fill="url(#g-teal)"    style={{animation:'panelPulse 11s ease-in-out infinite 2.5s',  '--base':0.26}} />
+      {/* Row 3 */}
+      <polygon points="0,440 275,460 230,700 0,680"        fill="url(#g-teal)"    style={{animation:'panelPulse 10s ease-in-out infinite 0.4s',  '--base':0.28}} />
+      <polygon points="275,460 700,465 660,705 230,700"    fill="url(#g-indigo)"  style={{animation:'panelPulse 13s ease-in-out infinite 3.5s',  '--base':0.26}} />
+      <polygon points="700,465 1090,455 1055,695 660,705"  fill="url(#g-amber)"   style={{animation:'panelPulse 8s  ease-in-out infinite 1.8s',  '--base':0.30}} />
+      <polygon points="1090,455 1440,440 1440,680 1055,695"fill="url(#g-crimson)" style={{animation:'panelPulse 12s ease-in-out infinite 2.8s',  '--base':0.28}} />
+      {/* Row 4 */}
+      <polygon points="0,680 230,700 195,900 0,900"        fill="url(#g-sapph)"   style={{animation:'panelPulse 14s ease-in-out infinite 1.2s',  '--base':0.26}} />
+      <polygon points="230,700 660,705 625,900 195,900"    fill="url(#g-ruby)"    style={{animation:'panelPulse 11s ease-in-out infinite 0.6s',  '--base':0.30}} />
+      <polygon points="660,705 1055,695 1025,900 625,900"  fill="url(#g-emer)"    style={{animation:'panelPulse 9s  ease-in-out infinite 4.5s',  '--base':0.24}} />
+      <polygon points="1055,695 1440,680 1440,900 1025,900"fill="url(#g-indigo)"  style={{animation:'panelPulse 12s ease-in-out infinite 2.2s',  '--base':0.28}} />
+
+      {/* ── Lead lines (dark) ── */}
+      <g stroke="rgba(0,0,0,0.70)" strokeWidth="2.5" fill="none">
+        <polyline points="360,0 320,220 275,460 230,700 195,900"/>
+        <polyline points="780,0 740,230 700,465 660,705 625,900"/>
+        <polyline points="1160,0 1120,215 1090,455 1055,695 1025,900"/>
+        <line x1="0" y1="200"  x2="1440" y2="200"/>
+        <line x1="0" y1="440"  x2="1440" y2="440"/>
+        <line x1="0" y1="680"  x2="1440" y2="680"/>
+      </g>
+
+      {/* ── Gold lead-line gleam ── */}
+      <g stroke="rgba(212,180,60,0.10)" strokeWidth="1" fill="none">
+        <polyline points="360,0 320,220 275,460 230,700 195,900"/>
+        <polyline points="1160,0 1120,215 1090,455 1055,695 1025,900"/>
+      </g>
+    </svg>
+  )
+}
+
+/* ─── Logo ─── */
 function BoltIcon () {
   return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
       <defs>
-        <linearGradient id="bg" x1="4.5" y1="2" x2="19.5" y2="22" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="#D4AF37" />
-          <stop offset="100%" stopColor="#9050C8" />
+        <linearGradient id="bl" x1="4.5" y1="2" x2="19.5" y2="22" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#c8b8f8"/>
+          <stop offset="100%" stopColor="#8060d0"/>
         </linearGradient>
       </defs>
       <path d="M13 2L4.5 13.5H11L10 22L19.5 10.5H13L13 2Z"
-        fill="url(#bg)" stroke="rgba(212,175,55,0.55)" strokeWidth="0.5" strokeLinejoin="round" />
+        fill="url(#bl)" strokeLinejoin="round"/>
     </svg>
   )
 }
 
-/* ─── Stained Glass SVG panels + lead lines ─── */
-function StainedGlass () {
-  const panels = [
-    ['0,0 320,0 285,190 0,175',          'rgba(130,8,25,0.19)',   '7s','0s'   ],
-    ['320,0 700,0 665,210 285,190',       'rgba(10,28,130,0.16)', '9s','1.2s' ],
-    ['700,0 1100,0 1085,195 665,210',     'rgba(35,105,20,0.15)', '8s','2.4s' ],
-    ['1100,0 1440,0 1440,175 1085,195',   'rgba(85,8,130,0.17)',  '11s','0.6s'],
-    ['0,175 285,190 245,415 0,400',       'rgba(130,85,5,0.15)',  '10s','1.8s'],
-    ['285,190 665,210 625,425 245,415',   'rgba(110,8,28,0.17)',  '7s','3.2s' ],
-    ['665,210 1085,195 1065,420 625,425', 'rgba(5,65,130,0.15)',  '9s','0.9s' ],
-    ['1085,195 1440,175 1440,400 1065,420','rgba(55,125,18,0.14)','8s','2.1s' ],
-    ['0,400 245,415 205,645 0,635',       'rgba(105,5,85,0.16)',  '11s','1.3s'],
-    ['245,415 625,425 585,655 205,645',   'rgba(5,110,80,0.15)',  '7s','2.7s' ],
-    ['625,425 1065,420 1045,655 585,655', 'rgba(125,65,5,0.16)',  '9s','0.4s' ],
-    ['1065,420 1440,400 1440,635 1045,655','rgba(85,5,125,0.17)', '8s','1.9s' ],
-    ['0,635 205,645 165,900 0,900',       'rgba(8,48,130,0.14)',  '10s','0.8s'],
-    ['205,645 585,655 545,900 165,900',   'rgba(110,18,8,0.16)',  '7s','3.0s' ],
-    ['585,655 1045,655 1025,900 545,900', 'rgba(18,110,18,0.14)', '9s','1.5s' ],
-    ['1045,655 1440,635 1440,900 1025,900','rgba(85,42,5,0.15)',  '8s','2.3s' ],
-  ]
-  return (
-    <svg style={{position:'absolute',inset:0,width:'100%',height:'100%'}}
-      viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-      {panels.map(([pts,fill,d,dl],i) => (
-        <polygon key={i} points={pts} fill={fill}
-          style={{animation:`panelBreath ${d} ease-in-out infinite ${dl}`}} />
-      ))}
-      {/* Vertical lead lines */}
-      <polyline points="320,0 285,190 245,415 205,645 165,900"  fill="none" stroke="rgba(0,0,0,0.65)" strokeWidth="2" />
-      <polyline points="700,0 665,210 625,425 585,655 545,900"  fill="none" stroke="rgba(0,0,0,0.65)" strokeWidth="2" />
-      <polyline points="1100,0 1085,195 1065,420 1045,655 1025,900" fill="none" stroke="rgba(0,0,0,0.65)" strokeWidth="2" />
-      {/* Horizontal lead lines */}
-      <line x1="0" y1="175" x2="1440" y2="175" stroke="rgba(0,0,0,0.45)" strokeWidth="1.2" />
-      <line x1="0" y1="400" x2="1440" y2="400" stroke="rgba(0,0,0,0.45)" strokeWidth="1.2" />
-      <line x1="0" y1="635" x2="1440" y2="635" stroke="rgba(0,0,0,0.45)" strokeWidth="1.2" />
-      {/* Gold gleam on two lead lines */}
-      <polyline points="320,0 285,190 245,415 205,645 165,900"  fill="none" stroke="rgba(212,175,55,0.07)" strokeWidth="1" />
-      <polyline points="1100,0 1085,195 1065,420 1045,655 1025,900" fill="none" stroke="rgba(212,175,55,0.06)" strokeWidth="1" />
-    </svg>
-  )
-}
-
-/* ═══════════════════════════════════════
-   ALL CSS + KEYFRAMES
-═══════════════════════════════════════ */
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Fira+Code:wght@300;400;500&display=swap');
-*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-
-/* Stained glass panel pulse */
-@keyframes panelBreath {
-  0%,100% { opacity:0.8; }
-  50%      { opacity:1.4; }
-}
-/* Light beam drift */
-@keyframes beamDrift {
-  0%,100% { transform:translateX(0) skewX(-4deg); opacity:0.45; }
-  50%     { transform:translateX(28px) skewX(4deg); opacity:0.78; }
-}
-/* Liquid metal morph A */
-@keyframes metalMorphA {
-  0%,100% { border-radius:58% 42% 62% 38% / 44% 56% 42% 58%; }
-  25%     { border-radius:42% 58% 44% 56% / 60% 40% 58% 42%; }
-  50%     { border-radius:56% 44% 38% 62% / 42% 58% 54% 46%; }
-  75%     { border-radius:38% 62% 56% 44% / 56% 42% 40% 60%; }
-}
-/* Liquid metal morph B */
-@keyframes metalMorphB {
-  0%,100% { border-radius:44% 56% 46% 54% / 60% 40% 58% 42%; }
-  33%     { border-radius:62% 38% 58% 42% / 38% 62% 44% 56%; }
-  66%     { border-radius:50% 50% 42% 58% / 54% 46% 62% 38%; }
-}
-/* Blob drifts */
-@keyframes driftA {
-  0%,100% { transform:translate(0,0); }
-  33%     { transform:translate(34px,-24px); }
-  66%     { transform:translate(-18px,28px); }
-}
-@keyframes driftB {
-  0%,100% { transform:translate(0,0); }
-  40%     { transform:translate(-44px,18px); }
-  70%     { transform:translate(22px,-32px); }
-}
-@keyframes driftC {
-  0%,100% { transform:translate(0,0); }
-  50%     { transform:translate(24px,34px); }
-}
-/* Ferrofluid card border morph */
-@keyframes ferroMorph {
-  0%,100% { border-radius:62% 38% 54% 46% / 48% 58% 42% 52%; }
-  14%     { border-radius:48% 52% 42% 58% / 60% 44% 56% 40%; }
-  28%     { border-radius:54% 46% 64% 36% / 42% 56% 44% 58%; }
-  42%     { border-radius:40% 60% 48% 52% / 54% 42% 58% 46%; }
-  57%     { border-radius:58% 42% 44% 56% / 46% 62% 38% 54%; }
-  71%     { border-radius:44% 56% 58% 42% / 62% 46% 52% 38%; }
-  85%     { border-radius:50% 50% 46% 54% / 40% 54% 60% 46%; }
-}
-/* Ferrofluid spikes */
-@keyframes spikeBreath {
-  0%,100% { transform:rotate(var(--rot)) scaleY(1);    opacity:0.45; }
-  50%     { transform:rotate(var(--rot)) scaleY(1.7);  opacity:1;    }
-}
-/* Logo rings */
-@keyframes ringCW  { from{transform:rotate(0deg)}   to{transform:rotate(360deg)}  }
-@keyframes ringCCW { from{transform:rotate(0deg)}   to{transform:rotate(-360deg)} }
-@keyframes logoPulse {
-  0%,100% { box-shadow:0 0 0 0 rgba(212,175,55,0.38); }
-  70%     { box-shadow:0 0 0 14px rgba(212,175,55,0);  }
-}
-/* Brand + button shimmer */
-@keyframes shimmer {
-  0%   { background-position:-220% center; }
-  100% { background-position:220% center;  }
-}
-/* Entrance */
-@keyframes fadeUp {
-  from { opacity:0; transform:translateY(22px); }
-  to   { opacity:1; transform:translateY(0);    }
-}
-/* Input gold scan sweep */
-@keyframes scanSweep {
-  0%   { transform:translateX(-100%); }
-  100% { transform:translateX(500%);  }
-}
-/* Error shake */
-@keyframes errShake {
-  0%,100% { transform:translateX(0);   }
-  20%     { transform:translateX(-7px);}
-  40%     { transform:translateX(7px); }
-  60%     { transform:translateX(-4px);}
-  80%     { transform:translateX(4px); }
-}
-/* Spinner */
-@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-/* Glass global shimmer */
-@keyframes glassGlimmer {
-  0%,100% { filter:brightness(1);    }
-  50%     { filter:brightness(1.18); }
-}
-/* Metal iridescence */
-@keyframes metalIrid {
-  0%   { background-position:0% 50%;   }
-  50%  { background-position:100% 50%; }
-  100% { background-position:0% 50%;   }
-}
-
-/* ROOT */
-.lr{
-  min-height:100vh; background:#040209;
-  display:flex; align-items:center; justify-content:center;
-  font-family:'Syne',sans-serif; overflow:hidden; position:relative;
-}
-
-/* STAINED GLASS */
-.glass-layer{ position:absolute; inset:0; pointer-events:none; animation:glassGlimmer 9s ease-in-out infinite; }
-.beam{ position:absolute; top:0; bottom:0; pointer-events:none; animation:beamDrift ease-in-out infinite; }
-
-/* LIQUID METAL */
-.metal-layer{ position:absolute; inset:0; pointer-events:none; overflow:hidden; }
-.mblob{ position:absolute; filter:blur(52px); mix-blend-mode:screen; }
-.mb1{
-  width:440px; height:360px; top:-95px; left:-75px;
-  background:radial-gradient(ellipse at 40% 45%, rgba(202,188,232,0.22) 0%, rgba(152,112,212,0.14) 45%, transparent 70%);
-  animation:metalMorphA 16s ease-in-out infinite, driftA 23s ease-in-out infinite;
-}
-.mb2{
-  width:360px; height:310px; bottom:-75px; right:-55px;
-  background:radial-gradient(ellipse at 55% 45%, rgba(218,205,244,0.18) 0%, rgba(172,92,212,0.12) 45%, transparent 70%);
-  animation:metalMorphB 20s ease-in-out infinite, driftB 27s ease-in-out infinite;
-}
-.mb3{
-  width:270px; height:250px; top:38%; left:52%;
-  background:radial-gradient(ellipse at 50% 50%, rgba(255,232,182,0.12) 0%, rgba(212,102,82,0.08) 50%, transparent 70%);
-  animation:metalMorphA 25s ease-in-out infinite 4s, driftC 19s ease-in-out infinite;
-}
-/* Chrome streak */
-.mstreak{
-  position:absolute; inset:0;
-  background:linear-gradient(105deg,
-    transparent 0%, rgba(202,192,232,0.05) 30%,
-    rgba(255,242,202,0.09) 50%, rgba(202,192,232,0.05) 70%, transparent 100%);
-  background-size:300% 300%; animation:metalIrid 14s ease infinite;
-}
-
-/* CARD WRAP */
-.card-wrap{
-  position:relative; z-index:10;
-  width:100%; max-width:448px; padding:28px;
-  animation:fadeUp 0.85s cubic-bezier(0.22,1,0.36,1) both;
-}
-
-/* FERROFLUID OUTER */
-.ferro-outer{
-  position:relative; padding:2.5px;
-  animation:ferroMorph 8s ease-in-out infinite;
-  background:linear-gradient(138deg,
-    rgba(212,175,55,0.62) 0%,  rgba(102,52,182,0.46) 28%,
-    rgba(40,20,92,0.56) 55%,   rgba(182,122,22,0.52) 78%,
-    rgba(212,175,55,0.58) 100%);
-}
-.ferro-outer::before{
-  content:''; position:absolute; inset:-4px; border-radius:inherit;
-  background:linear-gradient(138deg,
-    rgba(212,175,55,0.20) 0%, rgba(120,62,202,0.15) 50%, rgba(212,175,55,0.14) 100%);
-  filter:blur(18px); z-index:-1; pointer-events:none;
-}
-/* Spikes */
-.spike{
-  position:absolute; left:50%; top:50%;
-  border-radius:50% 50% 0 0 / 35% 35% 0 0;
-  background:linear-gradient(to top, rgba(212,175,55,0.95), rgba(182,122,255,0.45), transparent);
-  transform-origin:50% 100%;
-  animation:spikeBreath ease-in-out infinite;
-  pointer-events:none; z-index:20;
-}
-
-/* FERRO MASK — clips to morphing shape */
-.ferro-mask{ border-radius:inherit; overflow:hidden; }
-
-/* CARD INNER */
-.card-inner{
-  background:rgba(5,3,13,0.91);
-  backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
-  border-radius:inherit; padding:42px 38px 38px;
-  position:relative; overflow:hidden;
-}
-/* Colour leak from stained glass */
-.card-inner::before{
-  content:''; position:absolute; inset:0; pointer-events:none;
-  background:
-    radial-gradient(ellipse at 28% 18%, rgba(130,8,25,0.07) 0%, transparent 50%),
-    radial-gradient(ellipse at 74% 82%, rgba(40,10,102,0.06) 0%, transparent 50%);
-}
-/* Metal sheen overlay */
-.card-inner::after{
-  content:''; position:absolute; inset:0; pointer-events:none;
-  background:linear-gradient(135deg,
-    rgba(212,175,55,0.04) 0%, rgba(160,122,255,0.03) 50%, transparent 100%);
-}
-
-/* LOGO */
-.logo-area{ display:flex; flex-direction:column; align-items:center; margin-bottom:34px; animation:fadeUp 0.7s ease 0.2s both; }
-.logo-icon-wrap{ position:relative; width:62px; height:62px; margin-bottom:16px; }
-.logo-ring-outer{ position:absolute; inset:-8px; border-radius:50%; border:1px dashed rgba(212,175,55,0.22); animation:ringCW 18s linear infinite; }
-.logo-ring-inner{
-  position:absolute; inset:-2px; border-radius:50%;
-  border:1.5px solid rgba(212,175,55,0.38); animation:ringCCW 9s linear infinite;
-}
-.logo-ring-inner::after{
-  content:''; position:absolute; top:-4px; left:50%; transform:translateX(-50%);
-  width:7px; height:7px; border-radius:50%; background:#D4AF37;
-  box-shadow:0 0 10px #D4AF37, 0 0 22px rgba(212,175,55,0.5);
-}
-.logo-icon{
-  width:62px; height:62px; border-radius:16px;
-  background:linear-gradient(135deg,#0c0820,#190d3a);
-  border:1px solid rgba(212,175,55,0.25);
-  display:flex; align-items:center; justify-content:center;
-  position:relative; z-index:1; animation:logoPulse 3.2s ease-in-out infinite;
-}
-.brand-name{
-  font-size:27px; font-weight:800; letter-spacing:0.22em;
-  background:linear-gradient(90deg,#D4AF37 0%,#fff 35%,#c890ff 55%,#D4AF37 80%,#fff 100%);
-  background-size:220% auto;
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-  animation:shimmer 5.5s linear infinite;
-}
-.brand-sub{
-  font-family:'Fira Code',monospace; font-size:9px; letter-spacing:0.38em;
-  color:rgba(212,175,55,0.38); margin-top:6px; text-transform:uppercase;
-}
-
-/* CARD HEADING */
-.card-head{ margin-bottom:28px; animation:fadeUp 0.6s ease 0.38s both; }
-.card-head h2{ font-size:20px; font-weight:700; color:#fff; margin-bottom:5px; }
-.card-head p{ font-family:'Fira Code',monospace; font-size:11px; color:rgba(255,255,255,0.26); }
-
-/* ERROR */
-.err-box{
-  background:rgba(180,20,60,0.09); border:1px solid rgba(202,30,72,0.28);
-  border-radius:12px; padding:12px 14px;
-  display:flex; gap:10px; align-items:flex-start;
-  margin-bottom:22px; animation:errShake 0.45s ease;
-}
-.err-dot{ width:6px; height:6px; border-radius:50%; background:#e02050; box-shadow:0 0 7px #e02050; flex-shrink:0; margin-top:4px; }
-.err-text{ font-family:'Fira Code',monospace; font-size:11px; color:rgba(255,140,165,0.9); line-height:1.55; }
-
-/* FORM */
-.field{ margin-bottom:20px; animation:fadeUp 0.6s ease both; }
-.field:nth-child(1){ animation-delay:0.44s; }
-.field:nth-child(2){ animation-delay:0.52s; }
-.flabel{ font-family:'Fira Code',monospace; font-size:9px; font-weight:500; letter-spacing:0.24em; color:rgba(212,175,55,0.55); text-transform:uppercase; display:flex; align-items:center; gap:8px; margin-bottom:9px; }
-.flabel-line{ flex:1; height:1px; background:linear-gradient(90deg,rgba(212,175,55,0.22),transparent); }
-.finput-wrap{ position:relative; }
-.finput{
-  width:100%; background:rgba(255,255,255,0.035);
-  border:1px solid rgba(212,175,55,0.12); border-radius:12px;
-  padding:13px 16px; color:#fff;
-  font-family:'Fira Code',monospace; font-size:13px;
-  outline:none; transition:all 0.2s; letter-spacing:0.03em;
-}
-.finput::placeholder{ color:rgba(255,255,255,0.18); }
-.finput:focus{
-  border-color:rgba(212,175,55,0.48); background:rgba(212,175,55,0.04);
-  box-shadow:0 0 0 3px rgba(212,175,55,0.09), inset 0 0 24px rgba(212,175,55,0.03);
-}
-.finput.fe{ border-color:rgba(202,30,72,0.5); box-shadow:0 0 0 3px rgba(202,30,72,0.08); }
-.finput.eye{ padding-right:46px; }
-/* Gold scan sweep */
-.scan-wrap{ position:absolute; inset:0; border-radius:12px; overflow:hidden; pointer-events:none; }
-.scan-line{ position:absolute; top:0; bottom:0; width:42px; opacity:0; background:linear-gradient(90deg,transparent,rgba(212,175,55,0.18),transparent); }
-.finput:focus ~ .scan-wrap .scan-line{ opacity:1; animation:scanSweep 0.9s ease forwards; }
-.eye-btn{ position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:rgba(255,255,255,0.26); padding:4px; display:flex; align-items:center; transition:color 0.15s; }
-.eye-btn:hover{ color:rgba(212,175,55,0.72); }
-.ferr{ font-family:'Fira Code',monospace; font-size:10px; color:rgba(255,122,148,0.9); margin-top:7px; display:flex; align-items:center; gap:6px; }
-.ferr::before{ content:'!'; width:14px; height:14px; border-radius:50%; background:rgba(202,30,72,0.18); border:1px solid rgba(202,30,72,0.38); font-size:9px; text-align:center; line-height:14px; flex-shrink:0; }
-
-/* SUBMIT */
-.sub-wrap{ margin-top:28px; animation:fadeUp 0.6s ease 0.62s both; }
-.sub-btn{
-  width:100%; padding:14px 24px; border-radius:12px; border:none; cursor:pointer;
-  font-family:'Syne',sans-serif; font-size:13px; font-weight:700; letter-spacing:0.09em;
-  position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s;
-}
-.sub-btn:not(:disabled){
-  background:linear-gradient(135deg,#7a5c10,#D4AF37,#8040a8,#5020a0,#D4AF37);
-  background-size:260% auto; color:#fff;
-  box-shadow:0 4px 28px rgba(212,175,55,0.22);
-  animation:shimmer 4.5s linear infinite;
-}
-.sub-btn:not(:disabled):hover{ transform:translateY(-1px); box-shadow:0 8px 36px rgba(212,175,55,0.36); }
-.sub-btn:not(:disabled):active{ transform:scale(0.99); }
-.sub-btn:disabled{ background:rgba(212,175,55,0.07); color:rgba(255,255,255,0.22); cursor:not-allowed; }
-.sub-btn::before{ content:''; position:absolute; top:0; left:-100%; width:55%; height:100%; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent); transition:left 0.5s; }
-.sub-btn:not(:disabled):hover::before{ left:150%; }
-.btn-in{ position:relative; display:flex; align-items:center; justify-content:center; gap:8px; }
-
-/* FOOTER */
-.cfoot{ margin-top:28px; padding-top:20px; border-top:1px solid rgba(212,175,55,0.08); display:flex; align-items:center; justify-content:center; gap:8px; animation:fadeUp 0.6s ease 0.75s both; }
-.fdot{ width:3px; height:3px; border-radius:50%; background:rgba(212,175,55,0.32); }
-.ftext{ font-family:'Fira Code',monospace; font-size:10px; color:rgba(255,255,255,0.14); text-align:center; line-height:1.6; }
-.pfooter{ position:absolute; bottom:18px; left:50%; transform:translateX(-50%); font-family:'Fira Code',monospace; font-size:9px; color:rgba(255,255,255,0.07); white-space:nowrap; letter-spacing:0.12em; }
-`
-
-/* ══════════════════════════════════════════════════
+/* ════════════════════════════════════════
    MAIN COMPONENT
-══════════════════════════════════════════════════ */
+════════════════════════════════════════ */
 export default function Login () {
   const [email,       setEmail]       = useState('')
   const [password,    setPassword]    = useState('')
@@ -401,9 +503,9 @@ export default function Login () {
   const validate = () => {
     const e = {}
     if (!email.trim())                    e.email    = 'Email is required'
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email    = 'Enter a valid email'
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email    = 'Enter a valid email address'
     if (!password)                         e.password = 'Password is required'
-    else if (password.length < 6)          e.password = 'Min 6 characters required'
+    else if (password.length < 6)          e.password = 'Minimum 6 characters required'
     setFieldErrors(e)
     return Object.keys(e).length === 0
   }
@@ -427,7 +529,7 @@ export default function Login () {
         setError(data.error || 'Login failed — unexpected response')
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to connect. Ensure backend is running.')
+      setError(err.response?.data?.error || 'Unable to connect. Please ensure the backend is running.')
     } finally {
       setLoading(false)
     }
@@ -439,132 +541,115 @@ export default function Login () {
       <div className="lr">
 
         {/* ══ Layer 1: Stained Glass ══ */}
-        <div className="glass-layer">
-          <StainedGlass />
-          <div className="beam" style={{left:'19%',width:'40px',height:'100%',background:'linear-gradient(to bottom,rgba(130,8,25,0.10),rgba(130,8,25,0.04),transparent)',animationDuration:'10s'}} />
-          <div className="beam" style={{left:'46%',width:'56px',height:'100%',background:'linear-gradient(to bottom,rgba(10,28,130,0.08),rgba(10,28,130,0.03),transparent)',animationDuration:'13s',animationDelay:'-4s'}} />
-          <div className="beam" style={{left:'71%',width:'46px',height:'100%',background:'linear-gradient(to bottom,rgba(85,8,130,0.08),rgba(85,8,130,0.03),transparent)',animationDuration:'11s',animationDelay:'-7s'}} />
-          <div className="beam" style={{left:'88%',width:'30px',height:'100%',background:'linear-gradient(to bottom,rgba(35,105,20,0.06),transparent)',animationDuration:'15s',animationDelay:'-2s'}} />
+        <div className="glass-bg">
+          <StainedGlassBg />
+          {/* Coloured light rays cutting through glass */}
+          <div className="ray" style={{left:'22%',width:'48px',height:'100%',background:'linear-gradient(to bottom,rgba(100,10,28,0.18),rgba(100,10,28,0.06),transparent)',animationDuration:'11s'}}/>
+          <div className="ray" style={{left:'51%',width:'60px',height:'100%',background:'linear-gradient(to bottom,rgba(12,24,100,0.14),rgba(12,24,100,0.05),transparent)',animationDuration:'14s',animationDelay:'-4s'}}/>
+          <div className="ray" style={{left:'78%',width:'40px',height:'100%',background:'linear-gradient(to bottom,rgba(70,10,100,0.14),transparent)',animationDuration:'12s',animationDelay:'-7s'}}/>
         </div>
 
         {/* ══ Layer 2: Liquid Metal ══ */}
         <div className="metal-layer">
-          <div className="mblob mb1" />
-          <div className="mblob mb2" />
-          <div className="mblob mb3" />
-          <div className="mstreak" />
+          <div className="mblob mb1"/>
+          <div className="mblob mb2"/>
+          <div className="mblob mb3"/>
+          <div className="msheen"/>
         </div>
 
         {/* ══ Layer 3: Ferrofluid Card ══ */}
         <div className="card-wrap">
-          <div className="ferro-outer">
+          <div className="ferro-aura"/>
+          <div className="ferro-ring"/>
 
-            {/* Ferrofluid spikes around perimeter */}
-            {SPIKES.map((s, i) => (
-              <div key={i} className="spike" style={{
-                width         : s.w,
-                height        : s.h,
-                marginLeft    : -(s.w / 2),
-                marginTop     : -s.h,
-                transform     : `translate(${s.ex}px,${s.ey}px)`,
-                '--rot'       : `${s.rot}deg`,
-                animationDuration : `${s.duration}s`,
-                animationDelay    : `-${s.delay}s`,
-              }} />
-            ))}
+          <div className="card">
 
-            {/* Clips everything inside to the morphing shape */}
-            <div className="ferro-mask">
-              <div className="card-inner">
+            {/* Logo */}
+            <div className="logo-area">
+              <div className="logo-icon-wrap">
+                <div className="ring-outer"/>
+                <div className="ring-inner"/>
+                <div className="logo-icon-box"><BoltIcon/></div>
+              </div>
+              <div className="brand-name">ZYNTELL</div>
+              <div className="brand-sub">Admin Platform</div>
+            </div>
 
-                {/* Logo */}
-                <div className="logo-area">
-                  <div className="logo-icon-wrap">
-                    <div className="logo-ring-outer" />
-                    <div className="logo-ring-inner" />
-                    <div className="logo-icon"><BoltIcon /></div>
+            {/* Divider */}
+            <div className="divider">
+              <div className="div-line"/>
+              <span className="div-text">Sign in to continue</span>
+              <div className="div-line"/>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="err-box">
+                <div className="err-dot"/>
+                <span className="err-msg">{error}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} noValidate>
+              <div className="fields">
+
+                <div className="fg">
+                  <label className="flabel">Email Address</label>
+                  <div className="fi-wrap">
+                    <input type="email"
+                      className={`fi${fieldErrors.email ? ' err' : ''}`}
+                      value={email}
+                      onChange={e => { setEmail(e.target.value); clearErr('email') }}
+                      placeholder="you@zyntell.in"
+                      autoComplete="email" autoFocus
+                    />
+                    <div className="sw"><div className="sb"/></div>
                   </div>
-                  <div className="brand-name">ZYNTELL</div>
-                  <div className="brand-sub">// Admin&nbsp;Platform</div>
+                  {fieldErrors.email && <div className="ferr"><div className="ferr-dot"/>{fieldErrors.email}</div>}
                 </div>
 
-                {/* Heading */}
-                <div className="card-head">
-                  <h2>Sign in</h2>
-                  <p>{'>'}&nbsp;credentials required for secure access</p>
-                </div>
-
-                {/* Global error */}
-                {error && (
-                  <div className="err-box">
-                    <div className="err-dot" />
-                    <span className="err-text">{error}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleSubmit} noValidate>
-
-                  {/* Email */}
-                  <div className="field">
-                    <label className="flabel">Email <span className="flabel-line" /></label>
-                    <div className="finput-wrap">
-                      <input type="email"
-                        className={`finput${fieldErrors.email ? ' fe' : ''}`}
-                        value={email}
-                        onChange={e => { setEmail(e.target.value); clearErr('email') }}
-                        placeholder="you@zyntell.in"
-                        autoComplete="email" autoFocus
-                      />
-                      <div className="scan-wrap"><div className="scan-line" /></div>
-                    </div>
-                    {fieldErrors.email && <div className="ferr">{fieldErrors.email}</div>}
-                  </div>
-
-                  {/* Password */}
-                  <div className="field">
-                    <label className="flabel">Password <span className="flabel-line" /></label>
-                    <div className="finput-wrap">
-                      <input type={showPass ? 'text' : 'password'}
-                        className={`finput eye${fieldErrors.password ? ' fe' : ''}`}
-                        value={password}
-                        onChange={e => { setPassword(e.target.value); clearErr('password') }}
-                        placeholder="••••••••"
-                        autoComplete="current-password"
-                      />
-                      <div className="scan-wrap"><div className="scan-line" /></div>
-                      <button type="button" className="eye-btn"
-                        onClick={() => setShowPass(p => !p)} tabIndex={-1}>
-                        {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                    {fieldErrors.password && <div className="ferr">{fieldErrors.password}</div>}
-                  </div>
-
-                  {/* Submit */}
-                  <div className="sub-wrap">
-                    <button type="submit" className="sub-btn" disabled={loading}>
-                      <span className="btn-in">
-                        {loading
-                          ? <><Loader2 size={14} style={{animation:'spin 0.8s linear infinite'}} />Authenticating...</>
-                          : 'Access Dashboard →'}
-                      </span>
+                <div className="fg">
+                  <label className="flabel">Password</label>
+                  <div className="fi-wrap">
+                    <input type={showPass ? 'text' : 'password'}
+                      className={`fi eye${fieldErrors.password ? ' err' : ''}`}
+                      value={password}
+                      onChange={e => { setPassword(e.target.value); clearErr('password') }}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                    />
+                    <div className="sw"><div className="sb"/></div>
+                    <button type="button" className="eye-btn"
+                      onClick={() => setShowPass(p => !p)} tabIndex={-1}>
+                      {showPass ? <EyeOff size={15}/> : <Eye size={15}/>}
                     </button>
                   </div>
-
-                </form>
-
-                <div className="cfoot">
-                  <div className="fdot" />
-                  <span className="ftext">JWT secured · Authorized admins only</span>
-                  <div className="fdot" />
+                  {fieldErrors.password && <div className="ferr"><div className="ferr-dot"/>{fieldErrors.password}</div>}
                 </div>
 
               </div>
+
+              <div className="sub-wrap">
+                <button type="submit" className="sub-btn" disabled={loading}>
+                  <span className="btn-c">
+                    {loading
+                      ? <><Loader2 size={15} style={{animation:'spin 0.75s linear infinite'}}/>Signing in...</>
+                      : 'Sign In'}
+                  </span>
+                </button>
+              </div>
+            </form>
+
+            <div className="cfoot">
+              <ShieldCheck size={13} className="cfoot-icon"/>
+              <span className="cfoot-text">JWT secured · Authorized admins only</span>
             </div>
+
           </div>
         </div>
 
-        <div className="pfooter">ZYNTELL © {new Date().getFullYear()}</div>
+        <div className="pfooter">ZYNTELL © {new Date().getFullYear()} · All rights reserved</div>
       </div>
     </>
   )
