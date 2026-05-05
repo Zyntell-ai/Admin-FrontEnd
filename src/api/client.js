@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 // Backend runs on 3001. Admin routes are at /admin/... (NOT /api/admin/...)
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://finalbackend-wwua.onrender.com/'
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
