@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import { useToast } from '../context/ToastContext'
-import { getRevenue } from '../api/admin'
-import { Download, RefreshCw, AlertCircle, TrendingUp, DollarSign, Zap, Users } from 'lucide-react'
+import { getRevenue, getPendingCommissions, approveCommission, approveBulkCommissions } from '../api/admin'
+import { Download, RefreshCw, AlertCircle, TrendingUp, DollarSign, Zap, Users, CheckCircle, Clock } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell
@@ -33,13 +33,17 @@ export default function Commissions() {
   const [revenue, setRevenue] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [pending, setPending] = useState([])
+  const [selected, setSelected] = useState(new Set())
+  const [approving, setApproving] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await getRevenue()
-      setRevenue(data)
+      const [rev, pen] = await Promise.all([getRevenue(), getPendingCommissions()])
+      setRevenue(rev)
+      setPending(pen.commissions || [])
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load commission data'
       setError(msg)
@@ -47,9 +51,39 @@ export default function Commissions() {
     } finally {
       setLoading(false)
     }
-  }, [])                        // ← empty array, addToast removed
+  }, [addToast])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    setSelected(prev => prev.size === pending.length ? new Set() : new Set(pending.map(c => c.id)))
+  }
+
+  const handleApprove = async (ids) => {
+    setApproving(true)
+    try {
+      if (ids.length === 1) {
+        await approveCommission(ids[0])
+      } else {
+        await approveBulkCommissions(ids)
+      }
+      addToast(`${ids.length} commission${ids.length > 1 ? 's' : ''} approved`, 'success')
+      setSelected(new Set())
+      await fetchData()
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Approval failed', 'error')
+    } finally {
+      setApproving(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -97,6 +131,73 @@ export default function Commissions() {
           <button onClick={() => addToast('CSV export started', 'success')} className="btn-ghost"><Download size={13} /> Export</button>
         </div>
       </div>
+
+      {/* ── Pending Approvals ── */}
+      {pending.length > 0 && (
+        <div className="card p-5 mb-6 border border-amber-500/20">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Clock size={15} className="text-amber-400" />
+              <h3 className="section-title mb-0">Pending Approvals ({pending.length})</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              {selected.size > 0 && (
+                <button
+                  onClick={() => handleApprove([...selected])}
+                  disabled={approving}
+                  className="btn-primary gap-1.5 text-xs px-3 py-1.5"
+                >
+                  <CheckCircle size={12} />
+                  {approving ? 'Approving…' : `Approve ${selected.size} selected`}
+                </button>
+              )}
+              <button onClick={toggleAll} className="btn-ghost text-xs px-3 py-1.5">
+                {selected.size === pending.length ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/5 text-slate-500">
+                  <th className="pb-2 pr-3 text-left w-8"><input type="checkbox" checked={selected.size === pending.length && pending.length > 0} onChange={toggleAll} className="accent-indigo-500" /></th>
+                  <th className="pb-2 pr-4 text-left">Business</th>
+                  <th className="pb-2 pr-4 text-left">Type</th>
+                  <th className="pb-2 pr-4 text-left">Booking ID</th>
+                  <th className="pb-2 pr-4 text-left">Date</th>
+                  <th className="pb-2 pr-4 text-right">Amount</th>
+                  <th className="pb-2 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {pending.map(c => (
+                  <tr key={c.id} className={`transition-colors ${selected.has(c.id) ? 'bg-amber-500/5' : 'hover:bg-white/2'}`}>
+                    <td className="py-3 pr-3">
+                      <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} className="accent-indigo-500" />
+                    </td>
+                    <td className="py-3 pr-4 text-white font-medium">{c.businessName}</td>
+                    <td className="py-3 pr-4">
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 text-[10px] font-semibold">{c.type}</span>
+                    </td>
+                    <td className="py-3 pr-4 text-slate-400 font-mono">{c.bookingId || '—'}</td>
+                    <td className="py-3 pr-4 text-slate-400">{c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN') : '—'}</td>
+                    <td className="py-3 pr-4 text-right text-amber-400 font-semibold">₹{c.amount}</td>
+                    <td className="py-3 text-right">
+                      <button
+                        onClick={() => handleApprove([c.id])}
+                        disabled={approving}
+                        className="text-[11px] px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors font-medium"
+                      >
+                        Approve
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">

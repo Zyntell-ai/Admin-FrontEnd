@@ -82,6 +82,22 @@ export async function updateCategory(id, updates) {
   return res.data // { category }
 }
 
+// ── Commission Approval ─────────────────────────────────────────────────────
+export async function getPendingCommissions(params = {}) {
+  const res = await apiClient.get('/admin/commissions/pending', { params })
+  return res.data // { commissions, total }
+}
+
+export async function approveCommission(id) {
+  const res = await apiClient.post(`/admin/commissions/${id}/approve`)
+  return res.data // { success, id }
+}
+
+export async function approveBulkCommissions(ids) {
+  const res = await apiClient.post('/admin/commissions/approve-bulk', { ids })
+  return res.data // { success, approved }
+}
+
 // ── Leads ───────────────────────────────────────────────────────────────────
 export async function getLeads(params = {}) {
   const res = await apiClient.get('/admin/leads', { params })
