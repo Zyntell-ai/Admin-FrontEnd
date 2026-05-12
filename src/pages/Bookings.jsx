@@ -300,6 +300,13 @@ export default function Bookings() {
               </tr>
             </thead>
             <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-500">
+                    No bookings found{search ? ` matching "${search}"` : activeCategory !== 'All' ? ` in ${activeCategory}` : ''}
+                  </td>
+                </tr>
+              )}
               {filtered.map((b, i) => {
                 const isExpanded = expandedRow === b.businessId
                 const isSelected = selectedRows.includes(b.businessId)
