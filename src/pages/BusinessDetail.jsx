@@ -1,3 +1,47 @@
+/**
+ * @file        BusinessDetail.jsx
+ * @module      Business Detail
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Displays a detailed profile for a single business including revenue summary, inline field editing, commission ledger, active alerts, and invoice history tabs.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useEffect, useCallback)
+ *   - react-router-dom: useParams, useNavigate
+ *   - Layout: ../components/layout/Layout
+ *   - Modal: ../components/ui/Modal
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getBusinessProfile, updateBusiness, suspendBusiness (../api/admin)
+ *   - lucide-react: ArrowLeft, MapPin, Tag, Star, Ban, AlertOctagon, Unlock, TrendingUp, MessageSquare, Edit2, Check, X, CheckCircle, Clock, Activity, Zap, Phone, RefreshCw, AlertTriangle, DollarSign, FileText
+ *   - recharts: LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches business profile (including revenue summary, commission ledger, alerts, invoices) on mount
+ *   - Calls updateBusiness for inline field edits
+ *   - Calls suspendBusiness to disable business access (notifies owner via WhatsApp)
+ *   - Displays toast notifications for all admin actions
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
@@ -13,8 +57,17 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
 const TABS = ['Overview', 'Commission Ledger', 'Alerts', 'Invoice History']
 
+/**
+ * @function    deriveStatus
+ * @purpose     Derives a human-readable status string from business flags
+ * @param  {Object} b - Business object with isTrialActive and isActive flags
+ * @returns {string} 'unknown' | 'trial' | 'active' | 'suspended'
+ */
 function deriveStatus(b) {
   if (!b) return 'unknown'
   if (b.isTrialActive) return 'trial'
@@ -23,6 +76,9 @@ function deriveStatus(b) {
 }
 
 export default function BusinessDetail() {
+  // ─────────────────────────────────────────
+  // STATE & HOOKS
+  // ─────────────────────────────────────────
   const { id } = useParams()
   const navigate = useNavigate()
   const { addToast } = useToast()
@@ -38,10 +94,20 @@ export default function BusinessDetail() {
   const [editValues, setEditValues] = useState({})
   const [saving, setSaving]         = useState(false)
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches complete business profile including ledger, alerts, and invoices
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Load full business profile with all sub-collections
       const res = await getBusinessProfile(id)
       setData(res)
     } catch (err) {
@@ -55,10 +121,17 @@ export default function BusinessDetail() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  /**
+   * @function    handleSuspend
+   * @purpose     Submits a suspension request for the business with a required reason
+   * @returns {Promise<void>}
+   */
   const handleSuspend = async () => {
+    // [VALIDATION]: Reason is mandatory before suspending a business
     if (!suspendReason.trim()) { addToast('Please provide a reason', 'error'); return }
     setSuspending(true)
     try {
+      // [ADMIN ACTION]: Suspend business and trigger WhatsApp notification to owner
       await suspendBusiness(id, suspendReason)
       addToast('Business suspended', 'success')
       setActionModal(null)
@@ -71,9 +144,16 @@ export default function BusinessDetail() {
     }
   }
 
+  /**
+   * @function    handleSaveField
+   * @purpose     Saves a single edited field value to the business record
+   * @param  {string} field - The field key to update (e.g. 'name')
+   * @returns {Promise<void>}
+   */
   const handleSaveField = async (field) => {
     setSaving(true)
     try {
+      // [ADMIN ACTION]: Patch a single business field via admin API
       await updateBusiness(id, { [field]: editValues[field] })
       addToast(`${field} updated`, 'success')
       setEditField(null)
@@ -117,16 +197,21 @@ export default function BusinessDetail() {
     )
   }
 
+  // [DATA TRANSFORM]: Destructure profile response with safe defaults
   const { business: biz, revenueSummary, commissionLedger = [], activeAlerts = [], invoiceHistory = [] } = data
   const bStatus = deriveStatus(biz)
   const categoryIcon = { Healthcare: '🏥', Restaurant: '🍽️', 'Real Estate': '🏢', Beauty: '💅', Education: '🎓' }
 
   // Build revenue chart from invoiceHistory
+  // [DATA TRANSFORM]: Reverse invoice history to show chronological order in chart
   const revenueChart = invoiceHistory.slice().reverse().map(inv => ({
     month: inv.month?.slice(5) || '—',
     revenue: inv.total || 0,
   }))
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   return (
     <Layout title={biz.name}>
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-5 transition-colors">
@@ -216,6 +301,7 @@ export default function BusinessDetail() {
             className={clsx('px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px flex items-center gap-2',
               activeTab === tab ? 'text-white border-indigo-500 bg-indigo-500/5' : 'text-slate-400 border-transparent hover:text-slate-200')}>
             {tab}
+            {/* [BUSINESS RULE]: Show alert count badge only when there are active alerts */}
             {tab === 'Alerts' && activeAlerts.length > 0 && (
               <span className="bg-red-500/20 text-red-400 text-[10px] px-1.5 py-0.5 rounded-full">{activeAlerts.length}</span>
             )}

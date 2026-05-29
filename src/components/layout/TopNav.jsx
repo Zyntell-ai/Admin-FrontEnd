@@ -1,20 +1,73 @@
+/**
+ * @file        TopNav.jsx
+ * @module      Top Navigation
+ * @project     Admin-FrontEnd
+ * @layer       Component
+ * @description Sticky top navigation bar showing the page title, command palette trigger, refresh button, live notification bell, and admin user chip.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - react (useState, useEffect)
+ *   - lucide-react (Bell, RefreshCw, ChevronDown, X, Zap)
+ *   - ../../data/mockData (notifications)
+ *   - ../../context/AuthContext (useAuth)
+ *   - clsx
+ *
+ * @sideEffects
+ *   - setInterval that injects a simulated notification every 30 seconds
+ *   - Dispatches 'openCommandPalette' CustomEvent on search button click
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect } from 'react'
 import { Bell, RefreshCw, ChevronDown, X, Zap } from 'lucide-react'
 import { notifications } from '../../data/mockData'
 import { useAuth } from '../../context/AuthContext'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────
+
+/**
+ * @function    TopNav
+ * @purpose     Renders the sticky top navigation bar with page title, search trigger, notifications panel, and admin user chip
+ * @param  {string} title - The current page title to display in the header
+ * @returns {JSX.Element} Sticky header element
+ */
 export default function TopNav({ title }) {
+  // [STATE]: Controls whether the notification dropdown panel is visible
   const [notifOpen, setNotifOpen] = useState(false)
+  // [STATE]: Local copy of notification list; extended at runtime by the 30 s interval
   const [notifs, setNotifs] = useState(notifications)
+  // [STATE]: Pulse flag toggled true for 2 s whenever a new notification arrives
   const [pulse, setPulse] = useState(false)
   const unread = notifs.filter(n => !n.read).length
+  // [AUTH]: Read admin name for the user chip in the top right
   const { admin } = useAuth()
 
-  // Simulate a new notification every 30s
+  // [UI]: Simulate a new notification every 30s
   useEffect(() => {
     const t = setInterval(() => {
       setPulse(true)
+      // [CONTEXT]: Prepend a synthetic notification and cap the list at 10 items
       setNotifs(prev => [{
         id: Date.now(),
         type: 'booking',
@@ -27,8 +80,14 @@ export default function TopNav({ title }) {
     return () => clearInterval(t)
   }, [])
 
+  /**
+   * @function    markAllRead
+   * @purpose     Marks all notifications in local state as read
+   * @returns {void}
+   */
   const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, read: true })))
 
+  // [UI]: Color map for notification dot indicators by type
   const typeColors = {
     alert: 'bg-red-500',
     payment: 'bg-amber-500',
@@ -43,7 +102,7 @@ export default function TopNav({ title }) {
         <h2 className="font-display font-semibold text-white text-[15px]">{title}</h2>
       </div>
 
-      {/* Cmd+K Search trigger */}
+      {/* [UI]: Cmd+K Search trigger — fires custom event consumed by CommandPalette */}
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('openCommandPalette'))}
         className="flex items-center gap-2 text-slate-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.07] px-3 py-1.5 rounded-lg text-sm transition-all border border-white/[0.06] group"
@@ -56,12 +115,12 @@ export default function TopNav({ title }) {
         </div>
       </button>
 
-      {/* Refresh */}
+      {/* [UI]: Refresh button */}
       <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-all border border-white/[0.06]">
         <RefreshCw size={13} />
       </button>
 
-      {/* Notifications */}
+      {/* [UI]: Notifications bell with unread badge and dropdown panel */}
       <div className="relative">
         <button
           onClick={() => setNotifOpen(o => !o)}
@@ -87,6 +146,7 @@ export default function TopNav({ title }) {
             <div className="max-h-72 overflow-y-auto divide-y divide-white/[0.04]">
               {notifs.map(n => (
                 <div key={n.id}
+                  // [CONTEXT]: Mark individual notification as read on click
                   onClick={() => setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
                   className={clsx('px-4 py-3 hover:bg-white/[0.03] cursor-pointer transition-colors flex items-start gap-3', !n.read && 'bg-indigo-500/5')}>
                   <div className="mt-1.5 flex-shrink-0 relative">
@@ -107,7 +167,7 @@ export default function TopNav({ title }) {
         )}
       </div>
 
-      {/* User */}
+      {/* [AUTH]: Admin user chip — displays avatar initials and first name from AuthContext */}
       <button className="flex items-center gap-2 hover:bg-white/[0.04] px-2 py-1.5 rounded-lg transition-all">
         <div className="w-7 h-7 rounded-full bg-gradient-indigo flex items-center justify-center text-[11px] font-bold text-white">
           {admin?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AD'}

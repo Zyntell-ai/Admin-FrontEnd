@@ -1,3 +1,44 @@
+/**
+ * @file        Commissions.jsx
+ * @module      Commission Revenue
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Displays aggregate commission revenue with monthly trend and category breakdown charts, and provides an approval workflow for pending commission entries.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useEffect, useCallback)
+ *   - Layout: ../components/layout/Layout
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getRevenue, getPendingCommissions, approveCommission, approveBulkCommissions (../api/admin)
+ *   - lucide-react: Download, RefreshCw, AlertCircle, TrendingUp, DollarSign, Zap, Users, CheckCircle, Clock
+ *   - recharts: BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches revenue summary and pending commissions in parallel on mount
+ *   - Approves single or bulk commissions via admin API
+ *   - Displays success/error toasts on all mutation and fetch operations
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import { useToast } from '../context/ToastContext'
@@ -9,9 +50,21 @@ import {
 } from 'recharts'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+// [BUSINESS RULE]: Commission types map to distinct colours for chart differentiation
 const TYPE_COLORS = { BOOKING: '#4F46E5', SHOWUP: '#6EE7B7', LEAD: '#D4AF37' }
 const CATEGORY_COLORS = ['#4F46E5', '#818CF8', '#D4AF37', '#6EE7B7', '#94A3B8']
 
+/**
+ * @function    CustomTooltip
+ * @purpose     Renders a styled tooltip for Recharts bar and pie charts with INR formatting
+ * @param  {boolean} active    - Whether the tooltip is currently visible
+ * @param  {Array}   payload   - Array of series data points at the hovered position
+ * @param  {string}  label     - X-axis label at the hovered position
+ * @returns {JSX.Element|null}
+ */
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
@@ -28,20 +81,38 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
+// ─────────────────────────────────────────
+// STATE & HOOKS
+// ─────────────────────────────────────────
 export default function Commissions() {
   const { addToast } = useToast()
+
+  // [STATE]: Revenue summary from API and async flags
   const [revenue, setRevenue] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // [STATE]: Pending commission approvals and selection set
   const [pending, setPending] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [approving, setApproving] = useState(false)
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches revenue summary and pending commissions in parallel from the admin API
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Parallel fetch of revenue totals and pending approval queue
       const [rev, pen] = await Promise.all([getRevenue(), getPendingCommissions()])
+      // [STATE]: Store full revenue object and extract commissions array
       setRevenue(rev)
       setPending(pen.commissions || [])
     } catch (err) {
@@ -55,7 +126,14 @@ export default function Commissions() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  /**
+   * @function    toggleSelect
+   * @purpose     Adds or removes a single commission ID from the bulk-selection Set
+   * @param  {string} id - Commission document ID
+   * @returns {void}
+   */
   const toggleSelect = (id) => {
+    // [STATE]: Immutably update the Set by creating a new copy
     setSelected(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -63,19 +141,35 @@ export default function Commissions() {
     })
   }
 
+  /**
+   * @function    toggleAll
+   * @purpose     Selects all pending commissions or clears the selection if all are already selected
+   * @returns {void}
+   */
   const toggleAll = () => {
+    // [STATE]: Toggle between full selection and empty selection
     setSelected(prev => prev.size === pending.length ? new Set() : new Set(pending.map(c => c.id)))
   }
 
+  /**
+   * @function    handleApprove
+   * @purpose     Approves one or more commissions via the admin API, then refreshes data
+   * @param  {string[]} ids - Array of commission IDs to approve
+   * @returns {Promise<void>}
+   */
   const handleApprove = async (ids) => {
     setApproving(true)
     try {
+      // [BUSINESS RULE]: Single approval uses dedicated endpoint; multiple use bulk endpoint
+      // [API CALL]: Route to single or bulk approval based on array length
       if (ids.length === 1) {
         await approveCommission(ids[0])
       } else {
         await approveBulkCommissions(ids)
       }
+      // [ADMIN ACTION]: Inform admin how many commissions were approved
       addToast(`${ids.length} commission${ids.length > 1 ? 's' : ''} approved`, 'success')
+      // [STATE]: Clear selection after successful approval
       setSelected(new Set())
       await fetchData()
     } catch (err) {
@@ -85,6 +179,11 @@ export default function Commissions() {
     }
   }
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
+
+  // [GUARD]: Show skeleton while initial data loads
   if (loading) {
     return (
       <Layout title="Commissions">
@@ -94,6 +193,7 @@ export default function Commissions() {
     )
   }
 
+  // [GUARD]: Show full-page error only when no revenue data is available at all
   if (error && !revenue) {
     return (
       <Layout title="Commissions">
@@ -107,13 +207,16 @@ export default function Commissions() {
     )
   }
 
+  // [DATA TRANSFORM]: Destructure revenue response with safe fallbacks for chart rendering
   const byMonth = revenue?.byMonth || []
   const byCategory = revenue?.byCategory || []
   const byType = revenue?.byType || {}
   const currentMrr = revenue?.currentMrr || 0
 
+  // [DATA TRANSFORM]: Sum all commission types for the total KPI card
   const totalCommissions = (byType.BOOKING || 0) + (byType.SHOWUP || 0) + (byType.LEAD || 0)
 
+  // [DATA TRANSFORM]: Build pie chart dataset filtering out zero-value types
   const typePieData = Object.entries(byType)
     .filter(([, v]) => v > 0)
     .map(([key, value]) => ({ name: key, value, color: TYPE_COLORS[key] || '#94A3B8' }))
@@ -128,6 +231,7 @@ export default function Commissions() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchData} className="btn-ghost gap-1.5"><RefreshCw size={13} /> Refresh</button>
+          {/* [ADMIN ACTION]: Export triggers a CSV generation toast (handler is inline) */}
           <button onClick={() => addToast('CSV export started', 'success')} className="btn-ghost"><Download size={13} /> Export</button>
         </div>
       </div>
@@ -181,8 +285,9 @@ export default function Commissions() {
                     </td>
                     <td className="py-3 pr-4 text-slate-400 font-mono">{c.bookingId || '—'}</td>
                     <td className="py-3 pr-4 text-slate-400">{c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN') : '—'}</td>
-                    <td className="py-3 pr-4 text-right text-amber-400 font-semibold">₹{c.amount}</td>
+                    <td className="py-3 pr-4 text-right text-amber-400 font-semibold">₹{(c.amount ?? 0).toLocaleString()}</td>
                     <td className="py-3 text-right">
+                      {/* [ADMIN ACTION]: Approve a single commission row inline */}
                       <button
                         onClick={() => handleApprove([c.id])}
                         disabled={approving}
@@ -226,6 +331,7 @@ export default function Commissions() {
         <div className="flex-1" />
         <div className="text-right">
           <p className="text-xs text-slate-500 mb-1">Total including MRR</p>
+          {/* [BUSINESS RULE]: Grand total combines commission revenue with plan subscription MRR */}
           <p className="text-2xl font-bold font-display metric-gold">₹{(totalCommissions + currentMrr).toLocaleString()}</p>
         </div>
       </div>
@@ -293,6 +399,7 @@ export default function Commissions() {
         <div className="card p-5">
           <h3 className="section-title mb-4">Commission by Category</h3>
           <div className="space-y-3">
+            {/* [DATA TRANSFORM]: Sort categories descending by total commission for visual hierarchy */}
             {byCategory.sort((a, b) => b.total - a.total).map(({ category, total }, i) => {
               const maxTotal = byCategory[0]?.total || 1
               return (

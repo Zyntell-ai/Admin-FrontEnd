@@ -1,3 +1,43 @@
+/**
+ * @file        Sidebar.jsx
+ * @module      Sidebar Navigation
+ * @project     Admin-FrontEnd
+ * @layer       Component
+ * @description Fixed left sidebar component providing branded navigation links, active-route highlighting, logout functionality, and a profile shortcut.
+ *
+ * @updated     2026-05-28
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - react-router-dom (NavLink, useLocation, useNavigate)
+ *   - ../../context/AuthContext (useAuth)
+ *   - ../../context/ToastContext (useToast)
+ *   - lucide-react (LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
+ *                   DollarSign, Building2, Tag, Bell, Settings, Zap, ChevronRight, LogOut)
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Calls logout() from AuthContext on sign-out — clears localStorage tokens
+ *   - Dispatches a toast notification on logout
+ *   - Navigates to /login on logout
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
@@ -8,6 +48,11 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+
+/** Primary navigation items rendered in the sidebar menu */
 const navItems = [
   { path: '/',            label: 'Dashboard',   icon: LayoutDashboard },
   { path: '/bookings',    label: 'Bookings',     icon: CalendarCheck },
@@ -16,17 +61,34 @@ const navItems = [
   { path: '/commissions', label: 'Commissions',  icon: DollarSign },
   { path: '/businesses',  label: 'Businesses',   icon: Building2 },
   { path: '/categories',  label: 'Categories',   icon: Tag },
-  { path: '/alerts',      label: 'Alerts',       icon: Bell, badge: 7 },
+  { path: '/alerts',      label: 'Alerts',       icon: Bell },
   { path: '/settings',    label: 'Settings',     icon: Settings },
 ]
 
+// ─────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────
+
+/**
+ * @function    Sidebar
+ * @purpose     Renders the fixed left sidebar with logo, navigation links, logout button, and admin profile chip
+ * @returns {JSX.Element} Fixed-position sidebar element
+ */
 export default function Sidebar() {
   const location = useLocation()
   const navigate  = useNavigate()
+  // [AUTH]: Read admin profile and logout action from auth context
   const { admin, logout } = useAuth()
+  // [CONTEXT]: Use toast to confirm logout action to the user
   const { addToast } = useToast()
 
+  /**
+   * @function    handleLogout
+   * @purpose     Logs the admin out, shows a confirmation toast, and redirects to the login page
+   * @returns {void}
+   */
   const handleLogout = () => {
+    // [AUTH]: Clear session state via context then navigate to login
     logout()
     addToast('Logged out successfully', 'info')
     navigate('/login', { replace: true })
@@ -58,6 +120,7 @@ export default function Sidebar() {
         <p className="text-[9px] font-semibold text-slate-600 tracking-widest uppercase px-2 mb-3">Main Menu</p>
         <ul className="space-y-0.5">
           {navItems.map(({ path, label, icon: Icon, badge }) => {
+            // [CONTEXT]: Exact match for root, prefix match for all other routes
             const isActive = path === '/'
               ? location.pathname === '/'
               : location.pathname.startsWith(path)
@@ -121,7 +184,7 @@ export default function Sidebar() {
             </p>
             <p className="text-[10px] text-slate-500 truncate">{admin?.role || 'SUPER_ADMIN'}</p>
           </div>
-          
+
           <ChevronRight size={12} className="text-slate-600 group-hover:text-indigo-400 flex-shrink-0 transition-colors" />
         </button>
       </div>

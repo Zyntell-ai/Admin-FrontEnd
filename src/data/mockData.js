@@ -1,7 +1,38 @@
+/**
+ * @file        mockData.js
+ * @module      Mock Data
+ * @project     Admin-FrontEnd
+ * @layer       Data
+ * @description Static Firestore-aligned mock dataset providing businesses, bookings, stats, metrics, alerts, invoices, commissions, categories, admin users, trials, and chart data for the admin dashboard UI.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - None (pure data module, no imports)
+ *
+ * @sideEffects
+ *   - None
+ */
+
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+
 // ─── ZYNTELL Admin Dashboard — Firestore-Aligned Mock Data ──────────────────
 
+/** Supported platform service category labels */
 export const CATEGORIES = ['Healthcare', 'Restaurant', 'Real Estate', 'Beauty', 'Education']
 
+// ─────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────
+
+/**
+ * @function    businesses
+ * @purpose     Static list of registered business records used for seeding the UI and command palette search
+ * @returns {Array<Object>} Array of business objects with id, name, contact, category, plan, and trial fields
+ */
 export const businesses = [
   { id: 'biz001', name: 'Sunshine Dental', email: 'sunshine@test.com', phone: '+919876543210', category: 'Healthcare', subCategory: 'Dental', city: 'Hyderabad', locality: 'Banjara Hills', plan: 'pro', isActive: true, isTrialActive: false, createdAt: '2024-01-15', trialEndDate: null },
   { id: 'biz002', name: 'MedCare Clinic', email: 'medcare@test.com', phone: '+919876543211', category: 'Healthcare', subCategory: 'General', city: 'Hyderabad', locality: 'Jubilee Hills', plan: 'growth', isActive: true, isTrialActive: false, createdAt: '2024-02-10', trialEndDate: null },
@@ -15,6 +46,7 @@ export const businesses = [
   { id: 'biz010', name: 'City Tutors', email: 'tutors@test.com', phone: '+919876543219', category: 'Education', subCategory: 'Coaching', city: 'Hyderabad', locality: 'Ameerpet', plan: 'trial', isActive: false, isTrialActive: true, createdAt: '2024-04-08', trialEndDate: '2024-04-22' },
 ]
 
+/** Individual booking records across all businesses */
 export const bookings = [
   { id: 'book001', businessId: 'biz001', businessName: 'Sunshine Dental', category: 'Healthcare', customerName: 'Rajesh P.', customerPhone: '+919800001111', serviceName: 'Dental Cleaning', staffName: 'Dr. Rao', status: 'COMPLETED', scheduledAt: '2024-04-12T10:00', source: 'whatsapp', createdAt: '2024-04-10' },
   { id: 'book002', businessId: 'biz001', businessName: 'Sunshine Dental', category: 'Healthcare', customerName: 'Meera S.', customerPhone: '+919800001112', serviceName: 'Root Canal', staffName: 'Dr. Rao', status: 'NO_SHOW', scheduledAt: '2024-04-12T11:00', source: 'voice', createdAt: '2024-04-10' },
@@ -28,7 +60,7 @@ export const bookings = [
   { id: 'book010', businessId: 'biz002', businessName: 'MedCare Clinic', category: 'Healthcare', customerName: 'Ram B.', customerPhone: '+919800001120', serviceName: 'X-Ray', staffName: 'Dr. Priya', status: 'NO_SHOW', scheduledAt: '2024-04-11T10:00', source: 'voice', createdAt: '2024-04-10' },
 ]
 
-// Aggregated per-business stats (denormalised for dashboard)
+/** Aggregated per-business statistics pre-computed for the analytics and dashboard pages */
 export const businessStats = [
   { businessId: 'biz001', businessName: 'Sunshine Dental', category: 'Healthcare', city: 'Hyderabad', plan: 'pro', status: 'active', totalBookings: 487, confirmed: 445, completed: 398, noShows: 47, showUpRate: 89.4, anomalyPct: 10.6, generatedBill: 9740, totalRevenue: 8766, commission: 876, weeklyBookings: 112, monthlyBookings: 487 },
   { businessId: 'biz002', businessName: 'MedCare Clinic', category: 'Healthcare', city: 'Hyderabad', plan: 'growth', status: 'active', totalBookings: 312, confirmed: 298, completed: 271, noShows: 27, showUpRate: 90.9, anomalyPct: 9.1, generatedBill: 6240, totalRevenue: 5616, commission: 562, weeklyBookings: 72, monthlyBookings: 312 },
@@ -42,12 +74,14 @@ export const businessStats = [
   { businessId: 'biz010', businessName: 'City Tutors', category: 'Education', city: 'Hyderabad', plan: 'trial', status: 'trial', totalBookings: 34, confirmed: 28, completed: 20, noShows: 8, showUpRate: 71.4, anomalyPct: 28.6, generatedBill: 680, totalRevenue: 612, commission: 61, weeklyBookings: 8, monthlyBookings: 34 },
 ]
 
+/** Dashboard KPI snapshots for today, weekly, and monthly time windows */
 export const dashboardMetrics = {
   today: { bookings: 342, revenue: 18450, expectedBookings: 380, anomalyRate: 8.4, newTrials: 3 },
   weekly: { bookings: 2187, revenue: 124300, expectedBookings: 2400, anomalyRate: 7.1, newTrials: 12 },
   monthly: { bookings: 9420, revenue: 538600, expectedBookings: 10000, anomalyRate: 6.8, newTrials: 47 },
 }
 
+/** Category-level booking and revenue breakdown for the current day */
 export const categoryDayStats = [
   { category: 'Healthcare', bookings: 148, revenue: 8200, showUps: 134 },
   { category: 'Restaurant', bookings: 87, revenue: 4100, showUps: 74 },
@@ -56,6 +90,7 @@ export const categoryDayStats = [
   { category: 'Education', bookings: 12, revenue: 750, showUps: 8 },
 ]
 
+/** Monthly revenue vs target data points for the revenue line/bar chart */
 export const revenueChartData = [
   { month: 'Aug', revenue: 42000, target: 50000 },
   { month: 'Sep', revenue: 58000, target: 55000 },
@@ -68,6 +103,7 @@ export const revenueChartData = [
   { month: 'Apr', revenue: 95000, target: 90000 },
 ]
 
+/** Daily bookings vs show-ups data for the weekly bookings chart */
 export const bookingsChartData = [
   { day: 'Mon', bookings: 312, showups: 274 },
   { day: 'Tue', bookings: 389, showups: 351 },
@@ -78,6 +114,7 @@ export const bookingsChartData = [
   { day: 'Sun', bookings: 187, showups: 162 },
 ]
 
+/** Category revenue distribution data for the donut/pie chart */
 export const categoryRevenueData = [
   { name: 'Healthcare', value: 38, color: '#4F46E5' },
   { name: 'Restaurant', value: 24, color: '#818CF8' },
@@ -86,6 +123,7 @@ export const categoryRevenueData = [
   { name: 'Education', value: 7, color: '#94A3B8' },
 ]
 
+/** Active and historical platform alert records */
 export const clinicAlerts = [
   { id: 'alert001', businessId: 'biz006', businessName: 'Urban Realty', type: 'LOW_CONFIRMATION_RATE', confirmationRate: 83.1, platformAverage: 91.2, severity: 'Critical', status: 'OPEN', assignedTo: null, notes: '', createdAt: '2024-04-12', spotCheckPatients: [{ name: 'Suresh T.', phone: '+919800001117', bookingDate: '2024-04-10' }] },
   { id: 'alert002', businessId: 'biz005', businessName: 'La Bella Dining', type: 'PAYMENT_OVERDUE', confirmationRate: null, platformAverage: null, severity: 'Critical', status: 'OPEN', assignedTo: null, notes: '', createdAt: '2024-04-11', spotCheckPatients: [] },
@@ -96,6 +134,7 @@ export const clinicAlerts = [
   { id: 'alert007', businessId: 'biz010', businessName: 'City Tutors', type: 'LOW_CONFIRMATION_RATE', confirmationRate: 71.4, platformAverage: 91.2, severity: 'Critical', status: 'OPEN', assignedTo: null, notes: '', createdAt: '2024-04-06', spotCheckPatients: [] },
 ]
 
+/** Invoice records for all businesses covering a billing month */
 export const invoices = [
   { id: 'inv001', businessId: 'biz001', businessName: 'Sunshine Dental', category: 'Healthcare', month: '2024-03', baseFee: 3000, bookingCommissions: 4870, showupCommissions: 2380, leadCommissions: 600, adjustments: 0, total: 10850, status: 'PAID', dueDate: '2024-04-01', paidAt: '2024-04-03', razorpayPaymentId: 'pay_xyz123', pdfUrl: '#' },
   { id: 'inv002', businessId: 'biz002', businessName: 'MedCare Clinic', category: 'Healthcare', month: '2024-03', baseFee: 2000, bookingCommissions: 3120, showupCommissions: 1620, leadCommissions: 400, adjustments: 200, total: 7340, status: 'PAID', dueDate: '2024-04-01', paidAt: '2024-04-04', razorpayPaymentId: 'pay_xyz124', pdfUrl: '#' },
@@ -108,6 +147,7 @@ export const invoices = [
   { id: 'inv009', businessId: 'biz009', businessName: 'Wellness Hub', category: 'Beauty', month: '2024-03', baseFee: 3000, bookingCommissions: 3210, showupCommissions: 2170, leadCommissions: 0, adjustments: 0, total: 8380, status: 'PAID', dueDate: '2024-04-01', paidAt: '2024-04-05', razorpayPaymentId: 'pay_xyz127', pdfUrl: '#' },
 ]
 
+/** Commission records linked to bookings, show-ups, leads, and manual adjustments */
 export const commissions = [
   { id: 'com001', businessId: 'biz001', businessName: 'Sunshine Dental', category: 'Healthcare', bookingId: 'book001', type: 'SHOWUP', amount: 250, status: 'CONFIRMED', triggeredBy: 'OTP', signalScore: 145, invoiceId: 'inv001', createdAt: '2024-04-12' },
   { id: 'com002', businessId: 'biz001', businessName: 'Sunshine Dental', category: 'Healthcare', bookingId: 'book002', type: 'BOOKING', amount: 150, status: 'CONFIRMED', triggeredBy: 'BOT', signalScore: 90, invoiceId: 'inv001', createdAt: '2024-04-12' },
@@ -122,6 +162,7 @@ export const commissions = [
   { id: 'com011', businessId: 'biz002', businessName: 'MedCare Clinic', category: 'Healthcare', bookingId: null, type: 'ADJUSTMENT', amount: 200, status: 'CONFIRMED', triggeredBy: 'MANUAL', signalScore: null, invoiceId: 'inv002', createdAt: '2024-04-05' },
 ]
 
+/** Platform service category definitions with commission rates, lead questions, and performance data */
 export const categories = [
   { id: 'healthcare', label: 'Healthcare', icon: '🏥', phase: 1, isActive: true, subCategories: [{ id: 'dental', label: 'Dental Clinic' }, { id: 'general', label: 'General Clinic' }, { id: 'hospital', label: 'Hospital' }, { id: 'diagnostic', label: 'Diagnostic Center' }], commissionRates: { booking: 150, showup: 250, lead: { hot: 600, warm: 400, mild: 200 } }, leadQuestions: ['How long have you had this issue?', 'How severe is the pain (1-10)?', 'Is this your first visit?', 'Preferred appointment time?', 'Budget range?'], defaultServices: ['Consultation', 'Dental Cleaning', 'X-Ray', 'Blood Test'], businesses: 3, performance: 91, revenue: 218000 },
   { id: 'restaurant', label: 'Restaurant', icon: '🍽️', phase: 1, isActive: true, subCategories: [{ id: 'finedining', label: 'Fine Dining' }, { id: 'casual', label: 'Casual' }, { id: 'cafe', label: 'Cafe' }, { id: 'fastfood', label: 'Fast Food' }], commissionRates: { booking: 120, showup: 200, lead: { hot: 400, warm: 250, mild: 100 } }, leadQuestions: ['Party size?', 'Occasion?', 'Dietary requirements?', 'Budget per head?', 'Indoor or outdoor?'], defaultServices: ['Table Booking', 'Private Dining', 'Takeaway'], businesses: 2, performance: 84, revenue: 96000 },
@@ -130,6 +171,7 @@ export const categories = [
   { id: 'education', label: 'Education', icon: '🎓', phase: 2, isActive: false, subCategories: [{ id: 'coaching', label: 'Coaching' }, { id: 'tutoring', label: 'Tutoring' }, { id: 'workshop', label: 'Workshop' }], commissionRates: { booking: 100, showup: 150, lead: { hot: 300, warm: 200, mild: 100 } }, leadQuestions: ['Subject/course?', 'Student level?', 'Batch or 1-on-1?', 'Budget?', 'Start date?'], defaultServices: ['Demo Class', 'Consultation', 'Enrollment'], businesses: 1, performance: 62, revenue: 14000 },
 ]
 
+/** Admin user profiles for the Settings page (seeded data — backend has no CRUD endpoint) */
 export const adminUsers = [
   { id: 'admin001', name: 'Arjun Sharma', email: 'arjun@zyntell.ai', role: 'SUPER_ADMIN', permissions: ['manage_businesses', 'view_revenue', 'handle_alerts', 'manage_categories'], isActive: true, lastLoginAt: '2024-04-12T09:42' },
   { id: 'admin002', name: 'Priya Sinha', email: 'priya@zyntell.ai', role: 'ADMIN', permissions: ['manage_businesses', 'view_revenue', 'handle_alerts'], isActive: true, lastLoginAt: '2024-04-12T08:15' },
@@ -139,23 +181,27 @@ export const adminUsers = [
   { id: 'admin006', name: 'Dev Kumar', email: 'dev@zyntell.ai', role: 'ADMIN', permissions: ['manage_businesses', 'view_revenue'], isActive: false, lastLoginAt: '2024-03-28T09:00' },
 ]
 
+/** Active trial business records with conversation usage and days remaining */
 export const trials = [
   { businessId: 'biz005', businessName: 'La Bella Dining', category: 'Restaurant', startDate: '2024-04-01', endDate: '2024-04-15', conversationCount: 34, conversationCap: 50, converted: false, daysLeft: 3 },
   { businessId: 'biz006', businessName: 'Urban Realty', category: 'Real Estate', startDate: '2024-04-05', endDate: '2024-04-19', conversationCount: 28, conversationCap: 50, converted: false, daysLeft: 7 },
   { businessId: 'biz010', businessName: 'City Tutors', category: 'Education', startDate: '2024-04-08', endDate: '2024-04-22', conversationCount: 12, conversationCap: 50, converted: false, daysLeft: 10 },
 ]
 
+/** Businesses that have cancelled their subscription with churn reason and revenue impact */
 export const cancelledBusinesses = [
   { id: 'canc001', name: 'QuickFit Gym', category: 'Beauty', city: 'Mumbai', cancelledAt: '2024-03-28', reason: 'Price too high', plan: 'starter', totalRevenueLost: 4200, contactEmail: 'quickfit@test.com' },
   { id: 'canc002', name: 'Bistro Bliss', category: 'Restaurant', city: 'Pune', cancelledAt: '2024-03-22', reason: 'Low ROI', plan: 'growth', totalRevenueLost: 8600, contactEmail: 'bistro@test.com' },
   { id: 'canc003', name: 'HomeFirst Realty', category: 'Real Estate', city: 'Bangalore', cancelledAt: '2024-04-02', reason: 'Switched to competitor', plan: 'starter', totalRevenueLost: 3100, contactEmail: 'homefirst@test.com' },
 ]
 
+/** Businesses with abnormally low booking activity versus their expected minimum */
 export const lowUsageBusinesses = [
   { businessId: 'biz010', businessName: 'City Tutors', category: 'Education', bookingsLast30: 8, expectedMin: 30, lastActive: '2024-04-10' },
   { businessId: 'biz005', businessName: 'La Bella Dining', category: 'Restaurant', bookingsLast30: 14, expectedMin: 40, lastActive: '2024-04-11' },
 ]
 
+/** Geographic area-level aggregated performance metrics */
 export const areaPerformance = [
   { area: 'Hyderabad', businesses: 4, bookings: 929, revenue: 186400, showUpRate: 88.2 },
   { area: 'Mumbai', businesses: 1, bookings: 312, revenue: 62400, showUpRate: 90.9 },
@@ -166,6 +212,7 @@ export const areaPerformance = [
   { area: 'Pune', businesses: 1, bookings: 189, revenue: 37800, showUpRate: 83.1 },
 ]
 
+/** Conversion funnel stages from signup through 3-month retention */
 export const funnelData = [
   { stage: 'Signups', count: 284, pct: 100, color: '#4F46E5' },
   { stage: 'Trial Started', count: 231, pct: 81.3, color: '#6366F1' },
@@ -174,6 +221,7 @@ export const funnelData = [
   { stage: 'Retained 3mo', count: 89, pct: 31.3, color: '#E8C94A' },
 ]
 
+/** Seed notifications displayed in the TopNav notification bell on initial render */
 export const notifications = [
   { id: 1, type: 'alert', message: 'Urban Realty has 16.9% anomaly rate this week', time: '10m ago', read: false },
   { id: 2, type: 'payment', message: 'La Bella Dining invoice overdue by 7 days', time: '1h ago', read: false },

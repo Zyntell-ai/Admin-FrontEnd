@@ -1,3 +1,44 @@
+/**
+ * @file        Settings.jsx
+ * @module      Platform Settings
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Provides a tabbed interface for Super Admins to configure platform-wide system settings and view the role-based permissions matrix.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState)
+ *   - AuthContext (useAuth → admin)
+ *   - ToastContext (useToast → addToast)
+ *   - ../api/admin (updatePlatformConfig)
+ *   - ../components/layout/Layout
+ *   - lucide-react (Users, Shield, Settings2, Save, Loader2, Info, ChevronDown, ChevronUp)
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Calls updatePlatformConfig (PUT/PATCH platform config endpoint) on save
+ *   - Fires toast notifications on save success or failure
+ *   - Mutates local settings state on number input changes and toggle clicks
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState } from 'react'
 import Layout from '../components/layout/Layout'
 import { useAuth } from '../context/AuthContext'
@@ -9,8 +50,14 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+
+/** Tab labels rendered in the tab bar */
 const TABS = ['System Settings', 'Permissions Matrix']
 
+/** Permission definitions shown in the current admin's permission badge list */
 const ALL_PERMISSIONS = [
   { key: 'manage_businesses', label: 'Manage Businesses', desc: 'View, edit, suspend businesses' },
   { key: 'view_revenue',      label: 'View Revenue',      desc: 'Access billing and financial data' },
@@ -18,6 +65,7 @@ const ALL_PERMISSIONS = [
   { key: 'manage_categories', label: 'Manage Categories', desc: 'Edit categories and commission rates' },
 ]
 
+/** Role-by-resource access matrix rendered in the Permissions Matrix tab */
 const permissionsMatrix = [
   { resource: 'Dashboard',        superAdmin: true,  admin: true,  support: true,  finance: false },
   { resource: 'Bookings',         superAdmin: true,  admin: true,  support: true,  finance: false },
@@ -32,6 +80,7 @@ const permissionsMatrix = [
   { resource: 'Suspend Business', superAdmin: true,  admin: false, support: false, finance: false },
 ]
 
+/** Schema definitions for each configurable platform setting — key, label, default value, type, and display unit */
 const systemSettingsDefs = [
   { key: 'trialDays',       label: 'Trial Period',                         defaultValue: 14,   type: 'number', unit: 'days' },
   { key: 'anomalyThreshold', label: 'Anomaly Alert Threshold',             defaultValue: 15,   type: 'number', unit: '%' },
@@ -42,30 +91,57 @@ const systemSettingsDefs = [
   { key: 'autoInvoice',     label: 'Auto-generate Monthly Invoices',       defaultValue: true, type: 'toggle' },
 ]
 
+// ─────────────────────────────────────────
+// STATE & HOOKS
+// ─────────────────────────────────────────
+
 export default function Settings() {
+  // [AUTH]: Read current admin to determine SUPER_ADMIN access gate
   const { admin } = useAuth()
   const { addToast } = useToast()
+
+  // [STATE]: Active tab — 'System Settings' or 'Permissions Matrix'
   const [activeTab, setActiveTab] = useState('System Settings')
+
+  // [STATE]: Local settings object initialised from schema defaults
   const [settings, setSettings] = useState(() => {
     const s = {}
     systemSettingsDefs.forEach(d => { s[d.key] = d.defaultValue })
     return s
   })
+
+  // [STATE]: Async save indicator
   const [saving, setSaving] = useState(false)
 
+  // [GUARD]: Derive edit permission from role
   const isSuperAdmin = admin?.role === 'SUPER_ADMIN'
 
+// ─────────────────────────────────────────
+// CORE LOGIC / HANDLER FUNCTIONS
+// ─────────────────────────────────────────
+
+  /**
+   * @function    handleSaveSettings
+   * @purpose     Persists the current settings state to the backend via updatePlatformConfig and surfaces toast feedback
+   * @returns     {Promise<void>}
+   */
   const handleSaveSettings = async () => {
     setSaving(true)
     try {
+      // [API CALL]: PUT/PATCH platform configuration to backend
       await updatePlatformConfig(settings)
       addToast('Platform settings saved', 'success')
     } catch (err) {
+      // [STATE]: Surface API or permission error via toast
       addToast(err.response?.data?.error || 'Save failed — check permissions', 'error')
     } finally {
       setSaving(false)
     }
   }
+
+// ─────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────
 
   return (
     <Layout title="Settings">
@@ -111,6 +187,7 @@ export default function Settings() {
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Permissions</p>
           <div className="flex flex-wrap gap-2">
             {ALL_PERMISSIONS.map(p => {
+              // [AUTH]: Check if current admin has this permission or is SUPER_ADMIN
               const hasIt = admin?.role === 'SUPER_ADMIN' || admin?.permissions?.includes(p.key)
               return (
                 <span key={p.key} className={clsx('badge text-[10px]', hasIt ? 'badge-green' : 'bg-white/5 text-slate-500')}>
@@ -138,6 +215,7 @@ export default function Settings() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-sm font-semibold text-white">Platform Configuration</h3>
+            {/* [GUARD]: Save button only rendered for SUPER_ADMIN */}
             {isSuperAdmin ? (
               <button onClick={handleSaveSettings} disabled={saving}
                 className="flex items-center gap-1.5 text-xs btn-primary">
@@ -155,11 +233,13 @@ export default function Settings() {
                   {setting.unit && <p className="text-[10px] text-slate-500 mt-0.5">Unit: {setting.unit}</p>}
                 </div>
                 {setting.type === 'toggle' ? (
+                  // [STATE]: Toggle boolean setting value on click
                   <button onClick={() => setSettings(s => ({ ...s, [setting.key]: !s[setting.key] }))}
                     className={clsx('w-12 h-6 rounded-full transition-all relative flex-shrink-0', settings[setting.key] ? 'bg-indigo-600' : 'bg-white/10')}>
                     <div className={clsx('w-5 h-5 rounded-full bg-white shadow absolute top-0.5 transition-all', settings[setting.key] ? 'left-6' : 'left-0.5')} />
                   </button>
                 ) : (
+                  // [STATE]: Update numeric setting value on change; disabled for non-SUPER_ADMIN
                   <input type="number" value={settings[setting.key]} onChange={e => setSettings(s => ({ ...s, [setting.key]: parseFloat(e.target.value) || 0 }))}
                     className="input-field w-24 text-sm text-right" disabled={!isSuperAdmin} />
                 )}

@@ -1,3 +1,44 @@
+/**
+ * @file        Businesses.jsx
+ * @module      Businesses Admin
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Displays all registered businesses as themed cards with category-based colouring, status/plan filters, and navigation to individual business detail pages.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useEffect, useCallback)
+ *   - react-router-dom: useNavigate
+ *   - Layout: ../components/layout/Layout
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getBusinesses (../api/admin)
+ *   - lucide-react: Search, Plus, ExternalLink, Building2, RefreshCw, AlertTriangle
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches up to 100 businesses from admin API on mount and on filter change
+ *   - Navigates to /businesses/:id on card click
+ *   - Displays toast on fetch failure
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
@@ -5,6 +46,10 @@ import { useToast } from '../context/ToastContext'
 import { getBusinesses } from '../api/admin'
 import { Search, Plus, ExternalLink, Building2, RefreshCw, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
+
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
 
 // ─── Category colour map (mirrors client's categoryTheme.js, no import needed) ─
 // Keys are lowercased backend category values
@@ -39,6 +84,12 @@ const CAT_THEMES = {
 
 const DEFAULT_THEME = { accent: '#6366F1', a15: 'rgba(99,102,241,0.15)', a08: 'rgba(99,102,241,0.08)', border: 'rgba(99,102,241,0.30)', glow: 'rgba(99,102,241,0.10)', chip: '#1e1e3f', chipText: '#818cf8', label: '' }
 
+/**
+ * @function    getCatTheme
+ * @purpose     Resolves a category key to its theme object, following $ref aliases
+ * @param  {string} category - Raw category string from backend
+ * @returns {Object} Theme object with accent, a15, a08, border, glow, chip, chipText, label
+ */
 function getCatTheme(category) {
   if (!category) return DEFAULT_THEME
   const key = category.toLowerCase()
@@ -67,7 +118,14 @@ const CATEGORY_ICON = {
 const STATUSES = ['All', 'active', 'trial', 'suspended']
 const PLANS    = ['All Plans', 'pro', 'plus', 'free']
 
+/**
+ * @function    deriveStatus
+ * @purpose     Derives a display status string from business flags
+ * @param  {Object} b - Business object with isTrialActive and isActive flags
+ * @returns {string} 'trial' | 'active' | 'suspended'
+ */
 function deriveStatus(b) {
+  // [BUSINESS RULE]: Trial takes precedence over active; absence of both flags means suspended
   if (b.isTrialActive) return 'trial'
   if (b.isActive)      return 'active'
   return 'suspended'
@@ -75,6 +133,10 @@ function deriveStatus(b) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function Businesses() {
+  // ─────────────────────────────────────────
+  // STATE & HOOKS
+  // ─────────────────────────────────────────
+  // [STATE]: Core data and UI state for the businesses list page
   const [businesses, setBusinesses] = useState([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
@@ -84,14 +146,25 @@ export default function Businesses() {
   const navigate  = useNavigate()
   const { addToast } = useToast()
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches businesses from admin API applying current status and plan filters
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Pass server-side filters to reduce payload
       const params = { limit: 100 }
       if (status !== 'All')      params.status = status
       if (plan   !== 'All Plans') params.plan   = plan
       const data = await getBusinesses(params)
+      // [STATE]: Replace business list with fresh API response
       setBusinesses(data.businesses || [])
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load businesses'
@@ -104,6 +177,7 @@ export default function Businesses() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // [DATA TRANSFORM]: Apply client-side text search and status/plan filtering on loaded businesses
   const filtered = businesses.filter(b => {
     const s = deriveStatus(b)
     const matchSearch = b.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -113,6 +187,9 @@ export default function Businesses() {
     return matchSearch && matchStatus && matchPlan
   })
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   return (
     <Layout title="Businesses">
 

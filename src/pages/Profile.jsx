@@ -1,3 +1,44 @@
+/**
+ * @file        Profile.jsx
+ * @module      Admin Profile
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Displays the authenticated admin's identity, account details, role badge, active status, and permission set, with a sign-out action.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState)
+ *   - react-router-dom (useNavigate)
+ *   - AuthContext (useAuth → admin, logout)
+ *   - ToastContext (useToast → addToast)
+ *   - ../components/layout/Layout
+ *   - lucide-react (User, Mail, Shield, Calendar, Clock, Edit2, Check, X, Lock, Key, AlertCircle, ChevronRight, LogOut, ArrowLeft)
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Calls logout() which clears JWT token from AuthContext / localStorage
+ *   - Navigates to "/login" on sign-out
+ *   - Fires toast notification on sign-out
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState } from 'react'
 import Layout from '../components/layout/Layout'
 import { useAuth } from '../context/AuthContext'
@@ -10,6 +51,11 @@ import {
 import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+
+/** Tailwind class mapping from admin role to badge colour scheme */
 const ROLE_COLORS = {
   SUPER_ADMIN: 'bg-gold-muted text-gold border border-gold/30',
   ADMIN:       'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30',
@@ -17,6 +63,7 @@ const ROLE_COLORS = {
   FINANCE:     'bg-amber-500/10 text-amber-400 border border-amber-500/30',
 }
 
+/** Full list of permission keys and their display metadata used to render the permissions grid */
 const ALL_PERMISSIONS = [
   { key: 'manage_businesses', label: 'Manage Businesses', desc: 'View, edit, suspend businesses' },
   { key: 'view_revenue',      label: 'View Revenue',      desc: 'Access billing and financial data' },
@@ -25,17 +72,29 @@ const ALL_PERMISSIONS = [
   { key: 'manage_admins',     label: 'Manage Admins',     desc: 'Create and manage admin users' },
 ]
 
+// ─────────────────────────────────────────
+// CORE LOGIC / HANDLER FUNCTIONS
+// ─────────────────────────────────────────
+
 export default function Profile() {
+  // [AUTH]: Read current admin session and logout action from context
   const { admin, logout } = useAuth()
   const { addToast } = useToast()
   const navigate = useNavigate()
 
+  /**
+   * @function    handleLogout
+   * @purpose     Clears the admin session, shows a success toast, and redirects to the login page
+   * @returns     {void}
+   */
   const handleLogout = () => {
+    // [AUTH]: Invalidate token and clear stored admin state
     logout()
     addToast('Signed out successfully', 'success')
     navigate('/login', { replace: true })
   }
 
+  // [GUARD]: If no active admin session exists, render a fallback empty-state card
   if (!admin) {
     return (
       <Layout title="Profile">
@@ -47,9 +106,14 @@ export default function Profile() {
     )
   }
 
+  // [STATE]: Derive effective permissions — SUPER_ADMIN inherits all, others use their assigned array
   const permissions = admin.role === 'SUPER_ADMIN'
     ? ALL_PERMISSIONS.map(p => p.key)
     : (admin.permissions || [])
+
+// ─────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────
 
   return (
     <Layout title="Profile">

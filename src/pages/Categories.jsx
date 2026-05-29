@@ -1,3 +1,45 @@
+/**
+ * @file        Categories.jsx
+ * @module      Categories Admin
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Provides a master-detail interface for viewing, creating, editing, and toggling platform service categories with commission rates and sub-category support.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useEffect, useCallback)
+ *   - Layout: ../components/layout/Layout
+ *   - Modal: ../components/ui/Modal
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getCategories, createCategory, updateCategory (../api/admin)
+ *   - lucide-react: Plus, Edit2, ToggleLeft, ToggleRight, ChevronRight, Save, X, RefreshCw, AlertCircle, Loader2
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches all categories from admin API on mount
+ *   - Creates or updates a category via admin API on form submit
+ *   - Toggles a category's isActive flag via admin API
+ *   - Displays success/error toasts on all mutation operations
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
@@ -9,24 +51,49 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+// (No module-level constants beyond component defaults — config is inlined in state initialisers)
+
+// ─────────────────────────────────────────
+// STATE & HOOKS
+// ─────────────────────────────────────────
 export default function Categories() {
   const { addToast } = useToast()
+
+  // [STATE]: Category list and async loading flags
   const [catList, setCatList]   = useState([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState(null)
+
+  // [STATE]: Master-detail selection and edit modal state
   const [selected, setSelected] = useState(null)
   const [editModal, setEditModal] = useState(null)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving]     = useState(false)
+
+  // [STATE]: Create modal state
   const [createModal, setCreateModal] = useState(false)
   const [newCat, setNewCat]     = useState({ id: '', name: '', description: '', icon: '' })
   const [creating, setCreating] = useState(false)
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Loads all categories from the admin API and populates the list
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Retrieve full category list with no filters
       const data = await getCategories()
+      // [STATE]: Replace list with latest data from server
       setCatList(data.categories || [])
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load categories'
@@ -39,16 +106,31 @@ export default function Categories() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  /**
+   * @function    openEdit
+   * @purpose     Opens the edit modal pre-populated with the selected category's current values
+   * @param  {Object} cat - Category object from catList
+   * @returns {void}
+   */
   const openEdit = (cat) => {
+    // [STATE]: Clone category into editable form state to avoid mutating the list
     setEditForm({ ...cat })
     setEditModal(cat.id)
   }
 
+  /**
+   * @function    saveEdit
+   * @purpose     Persists edits to the currently open category via admin API
+   * @returns {Promise<void>}
+   */
   const saveEdit = async () => {
+    // [GUARD]: Do nothing if form state is absent
     if (!editForm) return
     setSaving(true)
     try {
+      // [DATA TRANSFORM]: Strip read-only fields before sending update payload
       const { id, createdAt, ...updates } = editForm
+      // [API CALL]: Send partial update for the category under edit
       await updateCategory(editModal, updates)
       addToast(`Category updated`, 'success')
       setEditModal(null)
@@ -60,9 +142,17 @@ export default function Categories() {
     }
   }
 
+  /**
+   * @function    toggleCat
+   * @purpose     Flips the isActive flag of a category via admin API
+   * @param  {Object} cat - Category object whose active state should be toggled
+   * @returns {Promise<void>}
+   */
   const toggleCat = async (cat) => {
     try {
+      // [API CALL]: Patch only the isActive field to avoid overwriting other data
       await updateCategory(cat.id, { isActive: !cat.isActive })
+      // [ADMIN ACTION]: Notify admin of the new activation state
       addToast(`Category ${cat.isActive ? 'deactivated' : 'activated'}`, 'success')
       fetchData()
     } catch (err) {
@@ -70,15 +160,24 @@ export default function Categories() {
     }
   }
 
+  /**
+   * @function    handleCreate
+   * @purpose     Validates the new-category form and submits it to the admin API
+   * @returns {Promise<void>}
+   */
   const handleCreate = async () => {
+    // [VALIDATION]: Both ID and Name are required fields; abort early if missing
     if (!newCat.id.trim() || !newCat.name.trim()) {
       addToast('ID and Name are required', 'error'); return
     }
     setCreating(true)
     try {
+      // [API CALL]: Create category as inactive draft — admin must explicitly activate it
+      // [BUSINESS RULE]: New categories always start inactive to prevent premature exposure
       await createCategory({ ...newCat, isActive: false })
       addToast(`Category "${newCat.name}" created`, 'success')
       setCreateModal(false)
+      // [STATE]: Reset form back to blank defaults after successful creation
       setNewCat({ id: '', name: '', description: '', icon: '' })
       fetchData()
     } catch (err) {
@@ -88,8 +187,12 @@ export default function Categories() {
     }
   }
 
+  // [DATA TRANSFORM]: Derive the currently selected category object from the list
   const selectedCat = catList.find(c => c.id === selected)
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   return (
     <Layout title="Categories">
       {/* Header */}
@@ -149,6 +252,7 @@ export default function Categories() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* [ADMIN ACTION]: Toggle category active state without opening the full edit form */}
                     <button onClick={e => { e.stopPropagation(); toggleCat(cat) }}
                       className="text-slate-400 hover:text-white transition-colors">
                       {cat.isActive ? <ToggleRight size={20} className="text-emerald-400" /> : <ToggleLeft size={20} />}
@@ -288,6 +392,7 @@ export default function Categories() {
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Category ID * (e.g. healthcare)</label>
+            {/* [VALIDATION]: ID is auto-normalised to lowercase with underscores replacing spaces */}
             <input value={newCat.id} onChange={e => setNewCat(v => ({ ...v, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))}
               placeholder="healthcare" className="input-field w-full text-sm font-mono" />
           </div>
@@ -306,6 +411,7 @@ export default function Categories() {
             <textarea value={newCat.description} onChange={e => setNewCat(v => ({ ...v, description: e.target.value }))}
               rows={2} className="input-field w-full resize-none text-sm" />
           </div>
+          {/* [BUSINESS RULE]: New categories start as inactive draft; admin activates after review */}
           <p className="text-[11px] text-slate-500">New categories start as inactive (draft). Activate after review.</p>
           <div className="flex gap-3 pt-2">
             <button onClick={handleCreate} disabled={creating}

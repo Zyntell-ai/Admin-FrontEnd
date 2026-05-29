@@ -1,3 +1,46 @@
+/**
+ * @file        Bookings.jsx
+ * @module      Bookings Admin
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Displays per-business booking aggregations with expandable rows for individual booking details, sortable columns, bulk actions, and CSV export.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useMemo, useEffect, useCallback)
+ *   - react-router-dom: useNavigate, useSearchParams
+ *   - Layout: ../components/layout/Layout
+ *   - ContextMenu: ../components/ui/ContextMenu
+ *   - Skeleton: ../components/ui/Skeleton
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getBookings, getBusinesses (../api/admin)
+ *   - lucide-react: Download, Search, X, ChevronDown, ChevronRight, Send, FileText, Eye, ArrowUpDown, RefreshCw, AlertTriangle, ExternalLink
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches bookings (up to 500) and businesses (up to 200) in parallel on mount and filter change
+ *   - Persists category filter to localStorage under key 'zyntell_bookings_filters'
+ *   - Displays context menu on right-click for business row actions
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
@@ -11,10 +54,19 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
 const CATEGORIES = ['All', 'Healthcare', 'Restaurant', 'Real Estate', 'Beauty', 'Education']
 const BOOKING_STATUSES = ['All', 'CONFIRMED', 'COMPLETED', 'NO_SHOW', 'CANCELLED']
 const LS_KEY = 'zyntell_bookings_filters'
 
+/**
+ * @function    BookingStatusBadge
+ * @purpose     Renders a colour-coded badge for a booking status value
+ * @param  {string} status - Booking status enum
+ * @returns {JSX.Element}
+ */
 function BookingStatusBadge({ status }) {
   const map = {
     CONFIRMED: 'badge-indigo', COMPLETED: 'badge-green',
@@ -23,11 +75,24 @@ function BookingStatusBadge({ status }) {
   return <span className={clsx('badge text-[10px]', map[status] || 'badge-gray')}>{status}</span>
 }
 
+/**
+ * @function    BusinessStatusBadge
+ * @purpose     Renders a colour-coded badge for a business account status
+ * @param  {string} status - Business status: active | trial | suspended
+ * @returns {JSX.Element}
+ */
 function BusinessStatusBadge({ status }) {
   const map = { active: 'badge-green', trial: 'badge-yellow', suspended: 'badge-red' }
   return <span className={clsx('badge capitalize', map[status] || 'badge-gray')}>{status}</span>
 }
 
+/**
+ * @function    RateBar
+ * @purpose     Renders a mini progress bar with percentage label, coloured amber when warning threshold is met
+ * @param  {number}  value   - Percentage value (0–100)
+ * @param  {boolean} warning - Whether to use warning colour
+ * @returns {JSX.Element}
+ */
 function RateBar({ value, warning }) {
   return (
     <div className="flex items-center gap-2">
@@ -40,6 +105,13 @@ function RateBar({ value, warning }) {
 }
 
 // Per-business aggregate from raw bookings
+/**
+ * @function    aggregateByBusiness
+ * @purpose     Groups raw booking records by businessId and computes per-business booking counts
+ * @param  {Array} bookings   - Flat array of booking objects
+ * @param  {Array} businesses - Flat array of business objects
+ * @returns {Array} Aggregated rows with booking metrics per business
+ */
 function aggregateByBusiness(bookings, businesses) {
   const bizMap = {}
   businesses.forEach(b => {
@@ -68,10 +140,14 @@ function aggregateByBusiness(bookings, businesses) {
 }
 
 export default function Bookings() {
+  // ─────────────────────────────────────────
+  // STATE & HOOKS
+  // ─────────────────────────────────────────
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { addToast } = useToast()
 
+  // [STATE]: Restore saved filters from localStorage on initial render
   const savedFilters = useMemo(() => {
     try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') } catch { return {} }
   }, [])
@@ -91,6 +167,15 @@ export default function Bookings() {
   const [rawBookings, setRawBookings] = useState([])
   const [bookingsByBiz, setBookingsByBiz] = useState({})
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches bookings and business records in parallel, indexes bookings by businessId, and computes per-business aggregates
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -99,6 +184,7 @@ export default function Bookings() {
       if (activeCategory !== 'All') params.category = activeCategory
       if (statusFilter !== 'All')   params.status = statusFilter
 
+      // [API CALL]: Fetch bookings and businesses concurrently for performance
       const [bkRes, bizRes] = await Promise.all([
         getBookings(params),
         getBusinesses({ limit: 200 }),
@@ -115,6 +201,7 @@ export default function Bookings() {
       })
       setBookingsByBiz(byBiz)
       setRawBookings(bookings)
+      // [DATA TRANSFORM]: Aggregate raw bookings into per-business metrics
       setAggRows(aggregateByBusiness(bookings, businesses))
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load bookings'
@@ -127,10 +214,12 @@ export default function Bookings() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // [STATE]: Persist selected category filter to localStorage for session continuity
   useEffect(() => {
     localStorage.setItem(LS_KEY, JSON.stringify({ category: activeCategory }))
   }, [activeCategory])
 
+  // [DATA TRANSFORM]: Apply client-side search and sort on top of aggregated rows
   const filtered = useMemo(() => {
     let rows = aggRows
     if (search) rows = rows.filter(b =>
@@ -145,6 +234,7 @@ export default function Bookings() {
     })
   }, [aggRows, search, sortKey, sortDir])
 
+  // [DATA TRANSFORM]: Sum filtered rows into column totals for the table footer
   const totals = useMemo(() => filtered.reduce((acc, b) => ({
     bookings: acc.bookings + b.totalBookings,
     confirmed: acc.confirmed + b.confirmed,
@@ -152,35 +242,73 @@ export default function Bookings() {
     noShows: acc.noShows + b.noShows,
   }), { bookings: 0, confirmed: 0, completed: 0, noShows: 0 }), [filtered])
 
+  /**
+   * @function    toggleSort
+   * @purpose     Cycles sort direction for a column or sets a new sort key descending
+   * @param  {string} key - Column key to sort by
+   */
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('desc') }
   }
 
+  /**
+   * @function    toggleRow
+   * @purpose     Expands or collapses the detail sub-row for a given business
+   * @param  {string} id - businessId to toggle
+   */
   const toggleRow = (id) => {
     setExpandedRow(prev => prev === id ? null : id)
     setContextMenu(null)
   }
 
+  /**
+   * @function    toggleSelect
+   * @purpose     Adds or removes a business from the multi-select set
+   * @param  {string}      id - businessId to toggle
+   * @param  {MouseEvent}  e  - Click event (propagation stopped)
+   */
   const toggleSelect = (id, e) => {
     e.stopPropagation()
     setSelectedRows(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  /**
+   * @function    toggleAll
+   * @purpose     Selects all visible rows or clears selection
+   */
   const toggleAll = () => setSelectedRows(prev =>
     prev.length === filtered.length ? [] : filtered.map(b => b.businessId)
   )
 
+  /**
+   * @function    handleContextMenu
+   * @purpose     Opens the right-click context menu at cursor position for the targeted row
+   * @param  {MouseEvent} e   - Right-click event
+   * @param  {Object}     row - Aggregated business row data
+   */
   const handleContextMenu = (e, row) => {
     e.preventDefault()
     setContextMenu({ x: e.clientX, y: e.clientY, row })
   }
 
+  /**
+   * @function    bulkAction
+   * @purpose     Executes a named bulk action on all selected rows and clears the selection
+   * @param  {string} action - Label for the action being performed
+   */
   const bulkAction = (action) => {
     addToast(`${action} for ${selectedRows.length} businesses`, 'success')
     setSelectedRows([])
   }
 
+  /**
+   * @function    SortHeader
+   * @purpose     Renders a sortable column header with directional arrow indicator
+   * @param  {string} label - Display label for the column
+   * @param  {string} sKey  - Sort key matching aggregated row property
+   * @returns {JSX.Element}
+   */
   const SortHeader = ({ label, sKey }) => (
     <th onClick={() => toggleSort(sKey)}
       className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-slate-300 select-none">
@@ -191,6 +319,9 @@ export default function Bookings() {
     </th>
   )
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   if (loading) {
     return (
       <Layout title="Bookings">

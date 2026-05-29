@@ -1,3 +1,43 @@
+/**
+ * @file        Analytics.jsx
+ * @module      Platform Analytics
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Displays platform-wide analytics including funnel KPIs, revenue trends, top cities, and category breakdowns.
+ *
+ * @updated     2026-05-28
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useEffect, useCallback)
+ *   - Layout: ../components/layout/Layout
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getPlatformAnalytics, getRevenue (../api/admin)
+ *   - lucide-react: AlertCircle, RefreshCw, TrendingUp, Users, DollarSign, Percent
+ *   - recharts: BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches platform analytics and revenue data in parallel on mount
+ *   - Displays toast on fetch failure
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import { useToast } from '../context/ToastContext'
@@ -9,8 +49,19 @@ import {
 } from 'recharts'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
 const COLORS = ['#4F46E5', '#818CF8', '#D4AF37', '#6EE7B7', '#94A3B8', '#F59E0B']
 
+/**
+ * @function    CustomTooltip
+ * @purpose     Renders a styled tooltip for Recharts with currency formatting for revenue fields
+ * @param  {boolean} active - Whether tooltip is active
+ * @param  {Array}   payload - Data payload from Recharts
+ * @param  {string}  label   - X-axis label at hover point
+ * @returns {JSX.Element|null}
+ */
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
@@ -28,16 +79,29 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Analytics() {
+  // ─────────────────────────────────────────
+  // STATE & HOOKS
+  // ─────────────────────────────────────────
   const { addToast } = useToast()
   const [analytics, setAnalytics] = useState(null)
   const [revenue, setRevenue]     = useState(null)
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches platform analytics and revenue data concurrently from admin API
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Fetch analytics and revenue in parallel to reduce load time
       const [an, rev] = await Promise.all([getPlatformAnalytics(), getRevenue()])
       setAnalytics(an)
       setRevenue(rev)
@@ -48,7 +112,7 @@ export default function Analytics() {
     } finally {
       setLoading(false)
     }
-  }, [])                        // ← empty array, addToast removed
+  }, [addToast])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -74,6 +138,7 @@ export default function Analytics() {
     )
   }
 
+  // [DATA TRANSFORM]: Destructure analytics and revenue with safe defaults
   const funnel    = analytics?.funnel    || {}
   const byCategory = analytics?.byCategory || []
   const byCity    = analytics?.byCity    || []
@@ -88,6 +153,9 @@ export default function Analytics() {
     { label: 'Paid Plans', value: funnel.paid || 0, icon: DollarSign, color: 'metric-gold' },
   ]
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   return (
     <Layout title="Analytics">
       {/* Header */}

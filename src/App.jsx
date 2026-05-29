@@ -1,3 +1,28 @@
+/**
+ * @file        App.jsx
+ * @module      Admin App Root
+ * @project     Admin-FrontEnd
+ * @layer       Config
+ * @description Root application component that defines all client-side routes and enforces authentication guards.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - react-router-dom (Routes, Route, Navigate, useLocation)
+ *   - ./context/AuthContext (useAuth)
+ *   - ./components/ui/CommandPalette
+ *   - ./pages/* (Login, Dashboard, Bookings, Analytics, Billing, Commissions,
+ *                Businesses, BusinessDetail, Categories, Alerts, Settings, Profile)
+ *
+ * @sideEffects
+ *   - Redirects unauthenticated users to /login
+ *   - Redirects authenticated users away from /login
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import CommandPalette from './components/ui/CommandPalette'
@@ -14,11 +39,26 @@ import Alerts from './pages/Alerts'
 import Settings from './pages/Settings'
 import Profile from './pages/Profile'
 
-// Protects all dashboard routes — redirects to /login if not authenticated
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+
+// ─────────────────────────────────────────
+// API FUNCTIONS
+// ─────────────────────────────────────────
+
+/**
+ * @function    ProtectedRoute
+ * @purpose     Wraps private routes — redirects to /login if user is not authenticated
+ * @param  {React.ReactNode} children - The protected page component to render
+ * @returns {React.ReactNode} Children if authenticated, otherwise a Navigate redirect
+ */
+// [GUARD]: Block unauthenticated access and preserve the intended destination
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
   const location = useLocation()
 
+  // [GUARD]: Block unauthenticated access and preserve the intended destination
   if (!isAuthenticated) {
     // Save where they were trying to go — redirect back after login
     return <Navigate to="/login" state={{ from: location }} replace />
@@ -27,14 +67,31 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-// Prevents logged-in users from seeing the login page
+/**
+ * @function    PublicRoute
+ * @purpose     Wraps public routes — redirects authenticated users away from /login
+ * @param  {React.ReactNode} children - The public page component to render
+ * @returns {React.ReactNode} Children if not authenticated, otherwise a Navigate redirect
+ */
+// [GUARD]: Bounce already-authenticated admins to the dashboard
 function PublicRoute({ children }) {
+  // [GUARD]: Bounce already-authenticated admins to the dashboard
   const { isAuthenticated } = useAuth()
   if (isAuthenticated) return <Navigate to="/" replace />
   return children
 }
 
+// ─────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────
+
+/**
+ * @function    App
+ * @purpose     Root component that renders the command palette and all application routes
+ * @returns {JSX.Element} The full route tree wrapped with authentication guards
+ */
 export default function App() {
+  // [AUTH]: Determine whether to render the command palette
   const { isAuthenticated } = useAuth()
 
   return (
@@ -43,7 +100,7 @@ export default function App() {
       {isAuthenticated && <CommandPalette />}
 
       <Routes>
-        {/* Public route — login */}
+        {/* [ROUTE]: Public route — login */}
         <Route
           path="/login"
           element={
@@ -53,7 +110,7 @@ export default function App() {
           }
         />
 
-        {/* Protected routes — require login */}
+        {/* [ROUTE]: Protected routes — require login */}
         <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/bookings" element={<ProtectedRoute><Bookings /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
@@ -65,7 +122,7 @@ export default function App() {
         <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        {/* Catch all — redirect to dashboard or login */}
+        {/* [ROUTE]: Catch all — redirect to dashboard or login */}
         <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
       </Routes>
     </>

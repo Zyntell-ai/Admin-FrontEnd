@@ -1,3 +1,45 @@
+/**
+ * @file        Billing.jsx
+ * @module      Billing Admin
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Manages platform invoices — view, filter, generate, adjust, and send payment reminders to businesses.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useMemo, useEffect, useCallback)
+ *   - Layout: ../components/layout/Layout
+ *   - Modal: ../components/ui/Modal
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getInvoices, adjustInvoice, generateAllInvoices (../api/admin)
+ *   - lucide-react: Download, Plus, Send, RefreshCw, FileText, AlertCircle, CheckCircle, Clock, X, Loader2
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches invoices from admin API on mount and on filter changes
+ *   - Calls generateAllInvoices to bulk-create invoices for a selected month
+ *   - Calls adjustInvoice to apply manual adjustments with reason
+ *   - Displays toast notifications on all actions
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
@@ -9,9 +51,18 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
 const CATEGORIES = ['All', 'Healthcare', 'Restaurant', 'Real Estate', 'Beauty', 'Education']
 const STATUSES   = ['All', 'PENDING', 'OVERDUE', 'PAID', 'WAIVED']
 
+/**
+ * @function    StatusBadge
+ * @purpose     Renders a colour-coded badge with icon for an invoice status
+ * @param  {string} status - Invoice status: PAID | PENDING | OVERDUE | WAIVED
+ * @returns {JSX.Element}
+ */
 function StatusBadge({ status }) {
   const map  = { PAID: 'badge-green', PENDING: 'badge-indigo', OVERDUE: 'badge-red', WAIVED: 'badge-gray' }
   const icons = { PAID: CheckCircle, PENDING: Clock, OVERDUE: AlertCircle, WAIVED: CheckCircle }
@@ -20,6 +71,9 @@ function StatusBadge({ status }) {
 }
 
 export default function Billing() {
+  // ─────────────────────────────────────────
+  // STATE & HOOKS
+  // ─────────────────────────────────────────
   const { addToast } = useToast()
   const [invoices, setInvoices]         = useState([])
   const [loading, setLoading]           = useState(true)
@@ -38,14 +92,25 @@ export default function Billing() {
   const [adjustReason, setAdjustReason] = useState('')
   const [adjusting, setAdjusting]       = useState(false)
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches invoices from admin API with optional status and category filters
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Pass server-side filters to reduce payload size
       const params = {}
       if (statusFilter !== 'All')   params.status = statusFilter
       if (activeCategory !== 'All') params.category = activeCategory
       const data = await getInvoices(params)
+      // [STATE]: Replace invoice list with fresh server data
       setInvoices(data.invoices || [])
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load invoices'
@@ -58,8 +123,10 @@ export default function Billing() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // [DATA TRANSFORM]: Already filtered server-side; memoized for stable reference
   const filtered = useMemo(() => invoices, [invoices]) // already filtered server-side
 
+  // [DATA TRANSFORM]: Accumulate financial totals across all visible invoices
   const totals = useMemo(() => filtered.reduce((acc, inv) => {
     acc.total += inv.total || 0
     if (inv.status === 'PENDING' || inv.status === 'OVERDUE') acc.outstanding += inv.total || 0
@@ -68,10 +135,17 @@ export default function Billing() {
     return acc
   }, { total: 0, outstanding: 0, collected: 0, overdue: 0 }), [filtered])
 
+  /**
+   * @function    handleGenerateAll
+   * @purpose     Calls admin API to bulk-generate invoices for all active businesses for the selected month
+   * @returns {Promise<void>}
+   */
   const handleGenerateAll = async () => {
+    // [VALIDATION]: Require a month selection before triggering generation
     if (!generateMonth) { addToast('Please select a month', 'error'); return }
     setGenerating(true)
     try {
+      // [ADMIN ACTION]: Trigger bulk invoice generation; existing invoices are skipped
       const result = await generateAllInvoices(generateMonth)
       addToast(`Generated ${result.generated} invoices (${result.skipped} skipped)`, 'success')
       setGenerateModal(false)
@@ -83,13 +157,21 @@ export default function Billing() {
     }
   }
 
+  /**
+   * @function    handleAdjust
+   * @purpose     Applies a manual monetary adjustment to a specific invoice
+   * @returns {Promise<void>}
+   */
   const handleAdjust = async () => {
+    // [GUARD]: Ensure modal target is set before attempting adjustment
     if (!adjustModal) return
     const amt = parseFloat(adjustAmount)
+    // [VALIDATION]: Amount must be a non-zero number; reason must not be empty
     if (isNaN(amt) || amt === 0) { addToast('Please enter a valid amount', 'error'); return }
     if (!adjustReason.trim()) { addToast('Reason is required', 'error'); return }
     setAdjusting(true)
     try {
+      // [ADMIN ACTION]: Persist adjustment amount and reason to the invoice record
       await adjustInvoice(adjustModal.id, amt, adjustReason)
       addToast(`Invoice adjusted by ₹${Math.abs(amt).toLocaleString()}`, 'success')
       setAdjModal(null); setAdjustAmount(''); setAdjustReason('')
@@ -104,6 +186,9 @@ export default function Billing() {
   const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   const toggleAll = () => setSelected(prev => prev.length === filtered.length ? [] : filtered.map(i => i.id))
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   return (
     <Layout title="Billing">
       {/* Header */}

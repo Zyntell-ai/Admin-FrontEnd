@@ -1,13 +1,49 @@
+/**
+ * @file        ContextMenu.jsx
+ * @module      Context Menu
+ * @project     Admin-FrontEnd
+ * @layer       Component
+ * @description Floating right-click context menu component that renders a viewport-clamped action list and closes on outside click or Escape key.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - react (useEffect, useRef)
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Attaches and removes 'mousedown' and 'keydown' document event listeners
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useEffect, useRef } from 'react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────
+
+/**
+ * @function    ContextMenu
+ * @purpose     Renders a positioned context menu at (x, y) clamped to the viewport, dismisses on outside click or Escape
+ * @param  {number}   x       - Desired horizontal position in pixels (from left)
+ * @param  {number}   y       - Desired vertical position in pixels (from top)
+ * @param  {Array}    items   - Array of menu item objects with { label, action, icon?, shortcut?, danger?, disabled?, divider? }
+ * @param  {Function} onClose - Callback invoked when the menu should be dismissed
+ * @returns {JSX.Element} Fixed-position context menu element
+ */
 export default function ContextMenu({ x, y, items, onClose }) {
   const ref = useRef(null)
 
   useEffect(() => {
+    // [GUARD]: Dismiss when user clicks outside the menu
     const handle = (e) => {
       if (ref.current && !ref.current.contains(e.target)) onClose()
     }
+    // [GUARD]: Dismiss on Escape key press
     const handleKey = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('mousedown', handle)
     document.addEventListener('keydown', handleKey)
@@ -17,9 +53,14 @@ export default function ContextMenu({ x, y, items, onClose }) {
     }
   }, [onClose])
 
-  // Clamp to viewport
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  // [UI]: Clamp menu position to viewport boundaries
   const menuW = 200
   const menuH = items.length * 36 + 16
+  // [GUARD]: Prevent menu from overflowing the right or bottom edge of the viewport
   const clampedX = Math.min(x, window.innerWidth - menuW - 8)
   const clampedY = Math.min(y, window.innerHeight - menuH - 8)
 
@@ -30,6 +71,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
       style={{ left: clampedX, top: clampedY, width: menuW }}
     >
       {items.map((item, i) => {
+        // [UI]: Render a divider line for separator entries
         if (item.divider) return <div key={i} className="my-1 border-t border-white/[0.06]" />
         return (
           <button

@@ -1,3 +1,29 @@
+/**
+ * @file        CommandPalette.jsx
+ * @module      Command Palette
+ * @project     Admin-FrontEnd
+ * @layer       Component
+ * @description Keyboard-driven command palette (Cmd+K) enabling instant navigation to pages, business records, and admin actions with recent-search persistence.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - react (useState, useEffect, useRef, useMemo)
+ *   - react-router-dom (useNavigate)
+ *   - ../../data/mockData (businesses, businessStats)
+ *   - lucide-react (Search, LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
+ *                   DollarSign, Building2, Tag, Bell, Settings, Zap, ArrowRight, X, Clock)
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Reads and writes 'zyntell_recent_searches' in localStorage
+ *   - Listens to document 'keydown' and window 'openCommandPalette' events
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { businesses, businessStats } from '../../data/mockData'
@@ -8,6 +34,11 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+
+/** Static page navigation entries shown in the palette */
 const PAGES = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard, group: 'Pages' },
   { label: 'Bookings', path: '/bookings', icon: CalendarCheck, group: 'Pages' },
@@ -20,6 +51,7 @@ const PAGES = [
   { label: 'Settings', path: '/settings', icon: Settings, group: 'Pages' },
 ]
 
+/** Static quick-action entries shown in the palette */
 const ACTIONS = [
   { label: 'Generate Invoices', path: '/billing', icon: CreditCard, group: 'Actions' },
   { label: 'View Critical Alerts', path: '/alerts', icon: Bell, group: 'Actions' },
@@ -27,12 +59,26 @@ const ACTIONS = [
   { label: 'Monitor Trial Businesses', path: '/analytics', icon: BarChart3, group: 'Actions' },
 ]
 
+/** localStorage key used to persist recent search selections */
 const RECENT_KEY = 'zyntell_recent_searches'
 
+// ─────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────
+
+/**
+ * @function    CommandPalette
+ * @purpose     Renders a full-screen overlay command palette with keyboard navigation, fuzzy search over pages/businesses/actions, and recent history
+ * @returns {JSX.Element|null} Palette overlay when open, null when closed
+ */
 export default function CommandPalette() {
+  // [STATE]: Controls palette open/closed visibility
   const [open, setOpen] = useState(false)
+  // [STATE]: Current search query string typed by the user
   const [query, setQuery] = useState('')
+  // [STATE]: Index of the currently keyboard-highlighted item in the flat list
   const [activeIdx, setActiveIdx] = useState(0)
+  // [CONTEXT]: Hydrate recent searches from localStorage on mount
   const [recent, setRecent] = useState(() => {
     try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] }
   })
@@ -40,14 +86,16 @@ export default function CommandPalette() {
   const listRef = useRef(null)
   const navigate = useNavigate()
 
-  // Open on Cmd+K
+  // [GUARD]: Open on Cmd+K / Ctrl+K; close on Escape
   useEffect(() => {
     const handle = (e) => {
+      // [GUARD]: Intercept Cmd/Ctrl+K to open palette; Escape to close
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setOpen(true) }
       if (e.key === 'Escape') setOpen(false)
     }
     const handleCustom = () => setOpen(true)
     document.addEventListener('keydown', handle)
+    // [CONTEXT]: Also listen for the custom event fired by the TopNav search button
     window.addEventListener('openCommandPalette', handleCustom)
     return () => {
       document.removeEventListener('keydown', handle)
@@ -55,10 +103,12 @@ export default function CommandPalette() {
     }
   }, [])
 
+  // [UI]: Reset query and focus input whenever palette opens
   useEffect(() => {
     if (open) { setQuery(''); setActiveIdx(0); setTimeout(() => inputRef.current?.focus(), 50) }
   }, [open])
 
+  /** Business results filtered from mock data by name, city, or category */
   const bizResults = useMemo(() => {
     if (!query) return []
     const q = query.toLowerCase()
@@ -68,18 +118,21 @@ export default function CommandPalette() {
       .map(b => ({ label: b.name, sub: `${b.category} · ${b.city}`, path: `/businesses/${b.id}`, icon: Building2, group: 'Businesses' }))
   }, [query])
 
+  /** Page results filtered by label match */
   const pageResults = useMemo(() => {
     if (!query) return PAGES
     const q = query.toLowerCase()
     return PAGES.filter(p => p.label.toLowerCase().includes(q))
   }, [query])
 
+  /** Action results filtered by label match */
   const actionResults = useMemo(() => {
     if (!query) return ACTIONS
     const q = query.toLowerCase()
     return ACTIONS.filter(a => a.label.toLowerCase().includes(q))
   }, [query])
 
+  /** Flat list of all items shown — includes recents when query is empty */
   const allItems = useMemo(() => {
     if (!query) return [
       ...recent.slice(0, 3).map(r => ({ ...r, group: 'Recent' })),
@@ -89,6 +142,7 @@ export default function CommandPalette() {
     return [...bizResults, ...pageResults, ...actionResults]
   }, [query, bizResults, pageResults, actionResults, recent])
 
+  /** Items grouped by their group label for sectioned rendering */
   const grouped = useMemo(() => {
     const groups = {}
     allItems.forEach(item => {
@@ -100,20 +154,34 @@ export default function CommandPalette() {
 
   const flatItems = useMemo(() => allItems, [allItems])
 
+  /**
+   * @function    go
+   * @purpose     Navigates to the selected item's path and persists it to the recent searches list
+   * @param  {Object} item - The selected palette item with at minimum a path and label
+   * @returns {void}
+   */
   const go = (item) => {
     navigate(item.path)
+    // [CONTEXT]: Prepend to recents, deduplicate by path, cap at 5 entries
     const newRecent = [item, ...recent.filter(r => r.path !== item.path)].slice(0, 5)
     setRecent(newRecent)
     localStorage.setItem(RECENT_KEY, JSON.stringify(newRecent))
     setOpen(false)
   }
 
+  /**
+   * @function    handleKey
+   * @purpose     Handles keyboard navigation (ArrowUp/Down) and selection (Enter) within the palette
+   * @param  {React.KeyboardEvent} e - Keyboard event from the search input
+   * @returns {void}
+   */
   const handleKey = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, flatItems.length - 1)) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)) }
     if (e.key === 'Enter' && flatItems[activeIdx]) go(flatItems[activeIdx])
   }
 
+  // [GUARD]: Return null when palette is closed to avoid rendering an invisible overlay
   if (!open) return null
 
   let flatIdx = 0
@@ -122,7 +190,7 @@ export default function CommandPalette() {
     <div className="fixed inset-0 z-[150] flex items-start justify-center pt-[15vh]">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
       <div className="relative w-full max-w-xl bg-[#0B0F1A] border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
-        {/* Input */}
+        {/* [UI]: Search input row */}
         <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.08]">
           <Search size={16} className="text-slate-400 flex-shrink-0" />
           <input
@@ -141,7 +209,7 @@ export default function CommandPalette() {
           <kbd className="text-[10px] text-slate-600 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded font-mono">Esc</kbd>
         </div>
 
-        {/* Results */}
+        {/* [UI]: Grouped results list */}
         <div ref={listRef} className="max-h-[400px] overflow-y-auto py-2">
           {flatItems.length === 0 && (
             <div className="px-4 py-8 text-center text-sm text-slate-500">
@@ -185,7 +253,7 @@ export default function CommandPalette() {
           ))}
         </div>
 
-        {/* Footer */}
+        {/* [UI]: Keyboard shortcut hint footer */}
         <div className="px-4 py-2.5 border-t border-white/[0.06] flex items-center gap-4 text-[10px] text-slate-600">
           <span className="flex items-center gap-1"><kbd className="bg-white/5 border border-white/10 px-1 py-0.5 rounded font-mono">↑↓</kbd> Navigate</span>
           <span className="flex items-center gap-1"><kbd className="bg-white/5 border border-white/10 px-1 py-0.5 rounded font-mono">↵</kbd> Select</span>

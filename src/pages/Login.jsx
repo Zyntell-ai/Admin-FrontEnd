@@ -1,3 +1,44 @@
+/**
+ * @file        Login.jsx
+ * @module      Admin Login
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Renders the full-page admin authentication form with animated background layers, field validation, and JWT-based login flow.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState)
+ *   - react-router-dom (useNavigate)
+ *   - AuthContext (useAuth → login)
+ *   - ToastContext (useToast → addToast)
+ *   - ../api/auth (loginApi)
+ *   - lucide-react (Eye, EyeOff, Loader2, ShieldCheck)
+ *
+ * @sideEffects
+ *   - Calls loginApi (POST /auth/login) on form submission
+ *   - Writes JWT token and admin data to AuthContext / localStorage via login()
+ *   - Navigates to "/" on successful authentication
+ *   - Fires toast notification on success
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -5,6 +46,11 @@ import { useToast } from '../context/ToastContext'
 import { loginApi } from '../api/auth'
 import { Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+
+/** Scoped CSS block — animation keyframes and component-level styles injected via <style> tag */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@300;400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -407,6 +453,15 @@ const CSS = `
 }
 `
 
+// ─────────────────────────────────────────
+// SUB-COMPONENTS
+// ─────────────────────────────────────────
+
+/**
+ * @function    StainedGlassBg
+ * @purpose     Renders the full-viewport SVG stained-glass background with jewel-tone gradient panels and animated lead lines
+ * @returns     {JSX.Element}
+ */
 /* ─── SVG stained glass panels that fill the whole background ─── */
 function StainedGlassBg () {
   return (
@@ -469,6 +524,11 @@ function StainedGlassBg () {
   )
 }
 
+/**
+ * @function    BoltIcon
+ * @purpose     Renders the Zyntell brand bolt SVG icon with a purple linear gradient fill
+ * @returns     {JSX.Element}
+ */
 /* ─── Logo ─── */
 function BoltIcon () {
   return (
@@ -485,55 +545,99 @@ function BoltIcon () {
   )
 }
 
+// ─────────────────────────────────────────
+// STATE & HOOKS
+// ─────────────────────────────────────────
+
 /* ════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════ */
 export default function Login () {
+  // [STATE]: Controlled form field values
   const [email,       setEmail]       = useState('')
   const [password,    setPassword]    = useState('')
+  // [STATE]: Password visibility toggle
   const [showPass,    setShowPass]    = useState(false)
+  // [STATE]: Async loading indicator during API call
   const [loading,     setLoading]     = useState(false)
+  // [STATE]: Top-level API / auth error message
   const [error,       setError]       = useState('')
+  // [STATE]: Per-field inline validation errors
   const [fieldErrors, setFieldErrors] = useState({})
 
+  // [AUTH]: Auth context provides login() to persist token and admin data
   const { login }    = useAuth()
   const { addToast } = useToast()
   const navigate     = useNavigate()
 
+// ─────────────────────────────────────────
+// CORE LOGIC / HANDLER FUNCTIONS
+// ─────────────────────────────────────────
+
+  /**
+   * @function    validate
+   * @purpose     Runs client-side validation on email and password fields before API call
+   * @returns     {boolean} true if all fields are valid, false otherwise
+   */
   const validate = () => {
     const e = {}
+    // [VALIDATION]: Email presence and format check
     if (!email.trim())                    e.email    = 'Email is required'
     else if (!/\S+@\S+\.\S+/.test(email)) e.email    = 'Enter a valid email address'
+    // [VALIDATION]: Password presence and minimum length check
     if (!password)                         e.password = 'Password is required'
     else if (password.length < 6)          e.password = 'Minimum 6 characters required'
     setFieldErrors(e)
     return Object.keys(e).length === 0
   }
 
+  /**
+   * @function    clearErr
+   * @purpose     Clears the inline field error for a given field when the user starts re-typing
+   * @param       {string} f - Field key ('email' | 'password')
+   * @returns     {void}
+   */
   const clearErr = f => {
+    // [STATE]: Remove stale field error on user input
     if (fieldErrors[f]) setFieldErrors(p => ({ ...p, [f]: '' }))
   }
 
+  /**
+   * @function    handleSubmit
+   * @purpose     Validates form, calls loginApi, stores token via AuthContext, and navigates to dashboard on success
+   * @param       {React.FormEvent} e - Form submit event
+   * @returns     {Promise<void>}
+   */
   const handleSubmit = async e => {
     e.preventDefault()
+    // [STATE]: Clear previous top-level error before new attempt
     setError('')
+    // [VALIDATION]: Abort if client-side checks fail
     if (!validate()) return
     setLoading(true)
     try {
+      // [API CALL]: POST credentials to auth endpoint
       const data = await loginApi(email.trim().toLowerCase(), password)
       if (data.token && data.admin) {
+        // [AUTH]: Persist JWT token and admin profile via AuthContext
         login(data.token, data.admin)
         addToast(`Welcome back, ${data.admin.name}!`, 'success')
         navigate('/', { replace: true })
       } else {
+        // [STATE]: Surface API-level error message
         setError(data.error || 'Login failed — unexpected response')
       }
     } catch (err) {
+      // [STATE]: Surface network or server error
       setError(err.response?.data?.error || 'Unable to connect. Please ensure the backend is running.')
     } finally {
       setLoading(false)
     }
   }
+
+// ─────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────
 
   return (
     <>

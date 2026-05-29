@@ -1,3 +1,49 @@
+/**
+ * @file        Dashboard.jsx
+ * @module      Platform Dashboard
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Renders the admin platform overview with real-time KPIs, business health metrics, revenue trend and category breakdown charts, recent activity, and quick-action navigation.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useEffect, useCallback)
+ *   - react-router-dom: useNavigate
+ *   - Layout: ../components/layout/Layout
+ *   - Skeleton: ../components/ui/Skeleton (SkeletonCard, SkeletonChart)
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getOverview, getRevenue (../api/admin)
+ *   - lucide-react: CalendarCheck, DollarSign, TrendingUp, TrendingDown, Activity, AlertTriangle,
+ *                   FileText, Send, Bell, Plus, ArrowRight, ShieldAlert, CreditCard, UserX, RefreshCw, Users
+ *   - recharts: LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+ *               XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Sector
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches overview and revenue data in parallel on mount; re-fetches on manual refresh
+ *   - Runs a 1-second interval ticker to track time since last data refresh
+ *   - Navigates to contextual admin pages on KPI card and pie-slice clicks
+ *   - Displays toast notifications on refresh, navigation, and fetch failures
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
@@ -16,8 +62,20 @@ import {
 } from 'recharts'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
+// [BUSINESS RULE]: Colour palette cycles across category slices in the revenue pie chart
 const CATEGORY_COLORS = ['#4F46E5', '#818CF8', '#D4AF37', '#6EE7B7', '#94A3B8', '#F59E0B', '#EF4444']
 
+/**
+ * @function    CustomTooltip
+ * @purpose     Renders a themed chart tooltip with INR currency formatting for revenue series
+ * @param  {boolean} active   - Whether the tooltip is active (hovered)
+ * @param  {Array}   payload  - Recharts series data at the cursor position
+ * @param  {string}  label    - X-axis label at the cursor position
+ * @returns {JSX.Element|null}
+ */
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
@@ -36,6 +94,12 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
+/**
+ * @function    renderActiveShape
+ * @purpose     Renders an expanded pie slice shape when a segment is hovered (Recharts activeShape)
+ * @param  {Object} props - Recharts shape props (cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill)
+ * @returns {JSX.Element}
+ */
 const renderActiveShape = (props) => {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
   return (
@@ -46,20 +110,37 @@ const renderActiveShape = (props) => {
   )
 }
 
+// ─────────────────────────────────────────
+// STATE & HOOKS
+// ─────────────────────────────────────────
 export default function Dashboard() {
+  // [STATE]: Primary data and async flags
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [overview, setOverview] = useState(null)
   const [revenue, setRevenue] = useState(null)
+
+  // [STATE]: "Last updated" elapsed-seconds counter and pie hover index
   const [lastUpdated, setLastUpdated] = useState(0)
   const [activePieIdx, setActivePieIdx] = useState(null)
+
   const navigate = useNavigate()
   const { addToast } = useToast()
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches overview and revenue data in parallel; treats revenue failure as non-fatal
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Parallel fetch — overview failure surfaces as error; revenue failure is silent
       const [ovResult, revResult] = await Promise.allSettled([getOverview(), getRevenue()])
       if (ovResult.status === 'fulfilled') setOverview(ovResult.value)
       else addToast('Overview failed to load', 'error')
@@ -74,25 +155,39 @@ export default function Dashboard() {
 
   // "Last updated" ticker
   useEffect(() => {
+    // [STATE]: Increment elapsed seconds every second to show data freshness to admins
     const t = setInterval(() => setLastUpdated(s => s + 1), 1000)
     return () => clearInterval(t)
   }, [])
 
+  /**
+   * @function    handleRefresh
+   * @purpose     Re-fetches all dashboard data and notifies the admin on completion
+   * @returns {void}
+   */
   const handleRefresh = () => {
     fetchData().then(() => addToast('Dashboard refreshed', 'success', 'All metrics updated'))
   }
 
+  /**
+   * @function    handlePieClick
+   * @purpose     Navigates to the bookings page pre-filtered by the clicked category
+   * @param  {Object} data - Recharts pie entry with category/name field
+   * @returns {void}
+   */
   const handlePieClick = (data) => {
+    // [ADMIN ACTION]: Deep-link to bookings filtered by the selected revenue category
     navigate(`/bookings?category=${data.category || data.name}`)
     addToast(`Filtered by ${data.category || data.name}`, 'info', 'Showing bookings page')
   }
 
-  // Build chart data from revenue API
+  // [DATA TRANSFORM]: Slice last 9 months and normalise month key to 2-digit format for X-axis
   const revenueChartData = revenue?.byMonth?.slice(-9).map(m => ({
-    month: m.month.slice(5), // "2024-03" → "03"
-    revenue: m.total,
+    month: m.month?.slice(5) ?? m.month, // "2024-03" → "03"
+    revenue: m.total ?? 0,
   })) || []
 
+  // [DATA TRANSFORM]: Map category revenue to pie chart entries with assigned palette colours
   const categoryPieData = revenue?.byCategory?.map((c, i) => ({
     name: c.category,
     category: c.category,
@@ -100,11 +195,17 @@ export default function Dashboard() {
     color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
   })) || []
 
+  // [DATA TRANSFORM]: Compute percentage share of total revenue per category for legend labels
   const categoryPiePercents = (() => {
     const total = categoryPieData.reduce((s, d) => s + d.value, 0)
     return categoryPieData.map(d => ({ ...d, pct: total > 0 ? Math.round((d.value / total) * 100) : 0 }))
   })()
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
+
+  // [GUARD]: Render skeleton layout while initial data loads
   if (loading) {
     return (
       <Layout title="Dashboard">
@@ -123,6 +224,7 @@ export default function Dashboard() {
     )
   }
 
+  // [GUARD]: Show full-page error only when overview data is entirely absent
   if (error && !overview) {
     return (
       <Layout title="Dashboard">
@@ -136,6 +238,7 @@ export default function Dashboard() {
     )
   }
 
+  // [DATA TRANSFORM]: Destructure overview with safe zero-fallbacks for all metric fields
   const ov = overview || {}
   const mrr = ov.mrr || 0
   const activeBusinesses = ov.activeBusinesses || 0
@@ -146,6 +249,7 @@ export default function Dashboard() {
   const overdueInvoices = ov.overdueInvoices || 0
   const newSignupsToday = ov.newSignupsToday || 0
   const totalCommissionThisMonth = ov.totalCommissionThisMonth || 0
+  // [BUSINESS RULE]: Revenue API MRR takes precedence over overview MRR when available
   const currentMrr = revenue?.currentMrr || mrr
 
   return (
@@ -220,6 +324,7 @@ export default function Dashboard() {
           { label: 'Trial Businesses', value: trialBusinesses, sub: 'Being evaluated', icon: Bell, border: 'border-orange-500/20', bg: 'bg-orange-500/10', text: 'text-orange-400', path: '/businesses' },
           { label: 'Today\'s Signups', value: newSignupsToday, sub: 'New businesses registered', icon: UserX, border: 'border-slate-500/20', bg: 'bg-slate-500/10', text: 'text-slate-400', path: '/businesses' },
         ].map(({ label, value, sub, icon: Icon, border, bg, text, path }) => (
+          // [ADMIN ACTION]: Each signal card navigates to the relevant management page
           <button key={label} onClick={() => navigate(path)}
             className={clsx('card p-4 border text-left hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 cursor-pointer', border)}>
             <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center mb-3', bg)}><Icon size={17} className={text} /></div>
@@ -283,6 +388,7 @@ export default function Dashboard() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
+                {/* [ADMIN ACTION]: Legend items are also clickable to deep-link to filtered bookings */}
                 {categoryPiePercents.map((d, i) => (
                   <button key={i} onClick={() => handlePieClick(d)}
                     className="flex items-center justify-between text-xs hover:bg-white/[0.04] rounded px-1 py-0.5 transition-colors group">
@@ -328,6 +434,7 @@ export default function Dashboard() {
           { label: 'View All Alerts', sub: 'Review open alerts', icon: Bell, path: '/alerts', toast: 'Navigating to Alerts' },
           { label: 'Add Business', sub: 'Onboard new client', icon: Plus, path: '/businesses', toast: 'Navigating to Businesses' },
         ].map(({ label, sub, icon: Icon, path, toast }) => (
+          // [ADMIN ACTION]: Quick action cards provide single-click navigation to key admin workflows
           <button key={label}
             onClick={() => { navigate(path); addToast(toast, 'info') }}
             className="card card-hover p-4 text-left group flex items-start gap-3 cursor-pointer active:scale-[0.98] transition-all">

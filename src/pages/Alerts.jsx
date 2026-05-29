@@ -1,3 +1,44 @@
+/**
+ * @file        Alerts.jsx
+ * @module      Platform Alerts
+ * @project     Admin-FrontEnd
+ * @layer       Page
+ * @description Displays, filters, and manages platform-wide system alerts with severity, type, and status controls.
+ *
+ * @updated     2026-05-29
+ * @version     1.0.0
+ *
+ * @dependencies
+ *   - React (useState, useEffect, useCallback)
+ *   - Layout: ../components/layout/Layout
+ *   - Modal: ../components/ui/Modal
+ *   - ToastContext: ../context/ToastContext
+ *   - Admin API: getAlerts, updateAlert (../api/admin)
+ *   - lucide-react: CheckCircle, AlertOctagon, AlertTriangle, Info, Eye, RefreshCw, AlertCircle
+ *   - clsx
+ *
+ * @sideEffects
+ *   - Fetches alerts from admin API on mount and on filter change
+ *   - Calls updateAlert to resolve, dismiss, or mark alert as in-review
+ *   - Displays toast notifications on success or failure
+ */
+
+/*
+ * ╔══════════════════════════════════════════╗
+ * ║           SDLC LIFECYCLE STATUS          ║
+ * ╠══════════════════════════════════════════╣
+ * ║ Planning     : ✅ Complete               ║
+ * ║ Design       : ✅ Complete               ║
+ * ║ Development  : ✅ Complete               ║
+ * ║ Testing      : ⚠️  Partial              ║
+ * ║ Deployment   : ✅ Complete               ║
+ * ║ Maintenance  : 🔄 Active                ║
+ * ╚══════════════════════════════════════════╝
+ */
+
+// ─────────────────────────────────────────
+// IMPORTS & DEPENDENCIES
+// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
@@ -9,10 +50,19 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// ─────────────────────────────────────────
+// CONSTANTS & CONFIG
+// ─────────────────────────────────────────
 const SEVERITIES = ['All', 'Critical', 'High', 'Medium', 'Low']
 const STATUSES   = ['All', 'OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED']
 const TYPES      = ['All', 'LOW_CONFIRMATION_RATE', 'PAYMENT_OVERDUE', 'SUSPICIOUS_ACTIVITY', 'TRIAL_EXPIRING']
 
+/**
+ * @function    SeverityBadge
+ * @purpose     Renders a colour-coded badge with icon for an alert severity level
+ * @param  {string} severity - Alert severity: Critical | High | Medium | Low
+ * @returns {JSX.Element}
+ */
 function SeverityBadge({ severity }) {
   const map = {
     Critical: 'bg-red-500/15 text-red-400 border border-red-500/20',
@@ -29,6 +79,12 @@ function SeverityBadge({ severity }) {
   )
 }
 
+/**
+ * @function    TypeLabel
+ * @purpose     Renders a colour-coded label for a specific alert type
+ * @param  {string} type - Alert type enum value (e.g. LOW_CONFIRMATION_RATE)
+ * @returns {JSX.Element}
+ */
 function TypeLabel({ type }) {
   const map = {
     LOW_CONFIRMATION_RATE: { label: 'Low Confirmation Rate', color: 'badge-yellow' },
@@ -41,6 +97,9 @@ function TypeLabel({ type }) {
 }
 
 export default function Alerts() {
+  // ─────────────────────────────────────────
+  // STATE & HOOKS
+  // ─────────────────────────────────────────
   const { addToast } = useToast()
   const [alerts, setAlerts]             = useState([])
   const [loading, setLoading]           = useState(true)
@@ -52,14 +111,25 @@ export default function Alerts() {
   const [resolveNotes, setResolveNotes]     = useState('')
   const [updating, setUpdating]             = useState(false)
 
+  // ─────────────────────────────────────────
+  // CORE LOGIC / HANDLER FUNCTIONS
+  // ─────────────────────────────────────────
+
+  /**
+   * @function    fetchData
+   * @purpose     Fetches alerts from admin API applying current status and type filters
+   * @returns {Promise<void>}
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // [API CALL]: Build query params from active filters before fetching
       const params = {}
       if (statusFilter !== 'All') params.status = statusFilter
       if (typeFilter !== 'All')   params.type = typeFilter
       const data = await getAlerts(params)
+      // [STATE]: Populate alerts list from API response
       setAlerts(data.alerts || [])
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load alerts'
@@ -72,15 +142,24 @@ export default function Alerts() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // [DATA TRANSFORM]: Client-side severity filter applied on top of server-filtered results
   const filteredAlerts = alerts.filter(a => {
     const matchSev  = severityFilter === 'All' || a.severity === severityFilter
     return matchSev
   })
 
+  /**
+   * @function    handleResolve
+   * @purpose     Updates alert status to RESOLVED or DISMISSED via admin API
+   * @param  {string} status - Target status: 'RESOLVED' | 'DISMISSED'
+   * @returns {Promise<void>}
+   */
   const handleResolve = async (status) => {
+    // [GUARD]: Ensure a modal target exists before proceeding
     if (!resolveModal) return
     setUpdating(true)
     try {
+      // [ADMIN ACTION]: Persist resolution status and notes to backend
       await updateAlert(resolveModal.id, { status, notes: resolveNotes })
       addToast(`Alert ${status === 'RESOLVED' ? 'resolved' : 'dismissed'} — ${resolveModal.businessName}`, 'success')
       setResolveModal(null)
@@ -93,8 +172,15 @@ export default function Alerts() {
     }
   }
 
+  /**
+   * @function    handleMarkInReview
+   * @purpose     Transitions an OPEN alert to IN_REVIEW status
+   * @param  {Object} alert - The alert object to update
+   * @returns {Promise<void>}
+   */
   const handleMarkInReview = async (alert) => {
     try {
+      // [ADMIN ACTION]: Mark alert as being actively investigated
       await updateAlert(alert.id, { status: 'IN_REVIEW', notes: alert.notes || '' })
       addToast(`Marked in review — ${alert.businessName}`, 'success')
       fetchData()
@@ -103,10 +189,14 @@ export default function Alerts() {
     }
   }
 
+  // [DATA TRANSFORM]: Derive summary counts for the stat strip
   const criticalCount = alerts.filter(a => a.severity === 'Critical' && a.status === 'OPEN').length
   const openCount     = alerts.filter(a => a.status === 'OPEN').length
   const reviewCount   = alerts.filter(a => a.status === 'IN_REVIEW').length
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   return (
     <Layout title="Alerts">
       {/* Header */}
