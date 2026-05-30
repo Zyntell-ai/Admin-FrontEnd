@@ -673,7 +673,9 @@ export default function Login () {
               <div className="logo-icon-wrap">
                 <div className="ring-outer"/>
                 <div className="ring-inner"/>
-                <div className="logo-icon-box"><BoltIcon/></div>
+                <div className="logo-icon-box">
+                  <img src="/logo.png" alt="Zyntell" style={{ width: 28, height: 28, objectFit: 'contain' }} />
+                </div>
               </div>
               <div className="brand-name">ZYNTELL</div>
               <div className="brand-sub">Admin Platform</div>

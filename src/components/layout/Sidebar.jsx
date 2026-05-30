@@ -43,7 +43,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import {
   LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
-  DollarSign, Building2, Tag, Bell, Settings, Zap,
+  DollarSign, Building2, Tag, Bell, Settings,
   ChevronRight, LogOut
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -105,9 +105,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-white/[0.05]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-indigo flex items-center justify-center shadow-indigo flex-shrink-0">
-            <Zap size={18} className="text-white" fill="white" />
-          </div>
+          <img src="/logo.png" alt="Zyntell" className="w-9 h-9 object-contain flex-shrink-0" />
           <div>
             <h1 className="font-display text-white text-[17px] font-bold tracking-wide leading-none">ZYNTELL</h1>
             <p className="text-[10px] text-slate-500 mt-0.5 tracking-widest uppercase">AI Platform</p>
