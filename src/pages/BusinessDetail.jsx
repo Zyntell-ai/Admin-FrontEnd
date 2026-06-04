@@ -47,7 +47,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { getBusinessProfile, updateBusiness, suspendBusiness } from '../api/admin'
+import { getBusinessProfile, updateBusiness, suspendBusiness, getFeatureOverrides, saveFeatureOverrides, changePlan, getPlanHistory } from '../api/admin'
 import {
   ArrowLeft, MapPin, Tag, Star, Ban, AlertOctagon,
   Unlock, TrendingUp, MessageSquare, Edit2, Check,
@@ -60,7 +60,23 @@ import clsx from 'clsx'
 // ─────────────────────────────────────────
 // CONSTANTS & CONFIG
 // ─────────────────────────────────────────
-const TABS = ['Overview', 'Commission Ledger', 'Alerts', 'Invoice History']
+const TABS = ['Overview', 'Commission Ledger', 'Alerts', 'Invoice History', 'Feature Control', 'Plan History']
+
+// Feature keys with human-readable labels (mirrors plans.js)
+const FEATURE_LABELS = {
+  whatsappBot:          'WhatsApp AI Bot',
+  virtualNumber:        'Virtual Number',
+  missedCallToWhatsApp: 'Missed Call → WhatsApp',
+  aiVoiceAgent:         'AI Voice Agent',
+  leadQualification:    'Lead Qualification',
+  showupVerification:   'Show-up Verification',
+  analyticsDashboard:   'Analytics Dashboard',
+  multilingualSupport:  'Multilingual (Telugu/Hindi/English)',
+  leadAuctionAccess:    'Lead Auction Access',
+  customBotPersona:     'Custom Bot Persona',
+  apiAccess:            'API Access',
+  conversationCap:      'Conversation Cap (per month, -1=unlimited)',
+}
 
 /**
  * @function    deriveStatus
@@ -94,6 +110,24 @@ export default function BusinessDetail() {
   const [editValues, setEditValues] = useState({})
   const [saving, setSaving]         = useState(false)
 
+  // [STATE]: Feature Control tab
+  const [featureData, setFeatureData]       = useState(null)
+  const [featureLoading, setFeatureLoading] = useState(false)
+  const [featureError, setFeatureError]     = useState(false)   // prevents infinite retry on 404
+  const [overrideDraft, setOverrideDraft]   = useState({})
+  const [savingFeatures, setSavingFeatures] = useState(false)
+
+  // [STATE]: Plan History tab
+  const [planHistory, setPlanHistory]       = useState(null)
+  const [planHistoryLoading, setPlanHistoryLoading] = useState(false)
+  const [planHistoryError, setPlanHistoryError] = useState(false)
+
+  // [STATE]: Admin plan change modal
+  const [showChangePlan, setShowChangePlan] = useState(false)
+  const [newPlan, setNewPlan]               = useState('')
+  const [planChangeReason, setPlanChangeReason] = useState('')
+  const [changingPlan, setChangingPlan]     = useState(false)
+
   // ─────────────────────────────────────────
   // CORE LOGIC / HANDLER FUNCTIONS
   // ─────────────────────────────────────────
@@ -120,6 +154,35 @@ export default function BusinessDetail() {
   }, [id])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // [BUSINESS RULE]: Load feature data once when Feature Control tab is activated.
+  // featureError flag prevents infinite retries if the backend returns 404 (not deployed yet).
+  useEffect(() => {
+    if (activeTab !== 'Feature Control') return
+    if (featureData || featureLoading || featureError) return
+    setFeatureLoading(true)
+    getFeatureOverrides(id)
+      .then(d => { setFeatureData(d); setOverrideDraft(d.featureOverrides || {}) })
+      .catch(err => {
+        setFeatureError(true)
+        addToast(err.response?.data?.error || 'Could not load features — backend may need a deploy', 'error')
+      })
+      .finally(() => setFeatureLoading(false))
+  }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // [BUSINESS RULE]: Load plan history once when Plan History tab is activated.
+  useEffect(() => {
+    if (activeTab !== 'Plan History') return
+    if (planHistory || planHistoryLoading || planHistoryError) return
+    setPlanHistoryLoading(true)
+    getPlanHistory(id)
+      .then(d => setPlanHistory(d.history || []))
+      .catch(err => {
+        setPlanHistoryError(true)
+        addToast(err.response?.data?.error || 'Could not load plan history', 'error')
+      })
+      .finally(() => setPlanHistoryLoading(false))
+  }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * @function    handleSuspend
@@ -162,6 +225,48 @@ export default function BusinessDetail() {
       addToast(err.response?.data?.error || 'Update failed', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  /**
+   * @function    handleSaveFeatures
+   * @purpose     Saves the override draft to the backend — changes take effect immediately
+   */
+  const handleSaveFeatures = async () => {
+    setSavingFeatures(true)
+    try {
+      await saveFeatureOverrides(id, overrideDraft)
+      addToast('Feature overrides saved', 'success')
+      // Refresh feature data to show updated audit log
+      const refreshed = await getFeatureOverrides(id)
+      setFeatureData(refreshed)
+      setOverrideDraft(refreshed.featureOverrides || {})
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Save failed', 'error')
+    } finally {
+      setSavingFeatures(false)
+    }
+  }
+
+  /**
+   * @function    handleChangePlan
+   * @purpose     Admin-changes the business plan and refreshes data
+   */
+  const handleChangePlan = async () => {
+    if (!newPlan) { addToast('Select a plan', 'error'); return }
+    setChangingPlan(true)
+    try {
+      await changePlan(id, newPlan, planChangeReason || 'Manual admin change')
+      addToast(`Plan changed to ${newPlan}`, 'success')
+      setShowChangePlan(false)
+      setNewPlan('')
+      setPlanChangeReason('')
+      setPlanHistory(null) // Force reload
+      fetchData()
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Plan change failed', 'error')
+    } finally {
+      setChangingPlan(false)
     }
   }
 
@@ -462,6 +567,210 @@ export default function BusinessDetail() {
           )}
         </div>
       )}
+
+      {/* ── Feature Control Tab ─────────────────────────────── */}
+      {activeTab === 'Feature Control' && (
+        <div className="space-y-5">
+          {/* Plan change shortcut */}
+          <div className="card p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white">Current Plan: <span className="text-indigo-400 uppercase">{biz.plan}</span></p>
+              <p className="text-xs text-slate-500 mt-0.5">Change plan without payment (admin override)</p>
+            </div>
+            <button onClick={() => setShowChangePlan(true)} className="btn-primary text-xs px-3 py-1.5">Change Plan</button>
+          </div>
+
+          {featureLoading ? (
+            <div className="card p-8 text-center text-slate-500 text-sm animate-pulse">Loading features…</div>
+          ) : featureError ? (
+            <div className="card p-8 text-center">
+              <p className="text-sm text-red-400 mb-1">Could not load feature overrides</p>
+              <p className="text-xs text-slate-500 mb-4">The backend may not have been deployed with the new routes yet.</p>
+              <button
+                onClick={() => { setFeatureError(false); setFeatureLoading(false); setFeatureData(null) }}
+                className="btn-ghost text-xs"
+              >
+                Retry
+              </button>
+            </div>
+          ) : featureData ? (
+            <>
+              {/* Feature override table */}
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+                  <h4 className="section-title mb-0">Feature Overrides</h4>
+                  <button onClick={handleSaveFeatures} disabled={savingFeatures} className="btn-primary text-xs px-3 py-1.5">
+                    {savingFeatures ? 'Saving…' : 'Save Overrides'}
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        {['Feature', 'Plan Default', 'Admin Override'].map(h => (
+                          <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(FEATURE_LABELS).map(([key, label]) => {
+                        const planVal   = featureData.planFeatures?.[key]
+                        const overrideVal = overrideDraft[key]
+                        const isNumeric = key === 'conversationCap'
+
+                        return (
+                          <tr key={key} className="border-b border-white/[0.04] table-row-hover">
+                            <td className="px-4 py-3 text-white text-xs">{label}</td>
+                            <td className="px-4 py-3 text-xs text-slate-400">
+                              {isNumeric
+                                ? (planVal === -1 ? '∞ Unlimited' : planVal)
+                                : planVal ? <span className="text-emerald-400">✓ Enabled</span> : <span className="text-slate-500">✗ Disabled</span>}
+                            </td>
+                            <td className="px-4 py-3">
+                              {isNumeric ? (
+                                // [UI]: Numeric override — text input for conversation cap
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    value={overrideVal ?? ''}
+                                    placeholder="Plan default"
+                                    onChange={e => {
+                                      const v = e.target.value === '' ? undefined : Number(e.target.value)
+                                      setOverrideDraft(d => { const n = { ...d }; if (v === undefined) delete n[key]; else n[key] = v; return n })
+                                    }}
+                                    className="input-field w-28 text-xs py-1"
+                                  />
+                                  {overrideVal !== undefined && (
+                                    <button onClick={() => setOverrideDraft(d => { const n = { ...d }; delete n[key]; return n })} className="text-xs text-slate-500 hover:text-red-400">Clear</button>
+                                  )}
+                                </div>
+                              ) : (
+                                // [UI]: Toggle override — Default / Force On / Force Off
+                                <select
+                                  value={overrideVal === undefined ? 'default' : overrideVal ? 'on' : 'off'}
+                                  onChange={e => {
+                                    const v = e.target.value
+                                    setOverrideDraft(d => {
+                                      const n = { ...d }
+                                      if (v === 'default') delete n[key]
+                                      else n[key] = v === 'on'
+                                      return n
+                                    })
+                                  }}
+                                  className="input-field text-xs py-1 w-36"
+                                >
+                                  <option value="default">Default (follow plan)</option>
+                                  <option value="on">Force ON</option>
+                                  <option value="off">Force OFF</option>
+                                </select>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Audit log */}
+              {featureData.auditLog?.length > 0 && (
+                <div className="card p-5">
+                  <h4 className="section-title mb-4">Feature Change Audit Log (last 10)</h4>
+                  <div className="space-y-2">
+                    {featureData.auditLog.map((entry, i) => (
+                      <div key={entry.id || i} className="flex items-start justify-between py-2 border-b border-white/[0.04] last:border-0">
+                        <div>
+                          <p className="text-xs text-white font-medium">
+                            Changed by <span className="text-indigo-400">{entry.changedBy}</span>
+                            {entry.changedByRole && <span className="text-slate-500"> ({entry.changedByRole})</span>}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Overrides: {Object.keys(entry.overrides || {}).length === 0 ? 'All cleared' : Object.entries(entry.overrides || {}).map(([k, v]) => `${k}=${v}`).join(', ')}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-slate-500 shrink-0 ml-4">
+                          {entry.changedAt?.toDate ? entry.changedAt.toDate().toLocaleString() : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="card p-8 text-center text-slate-500 text-sm">Could not load feature data</div>
+          )}
+        </div>
+      )}
+
+      {/* ── Plan History Tab (Task 8) ────────────────────────── */}
+      {activeTab === 'Plan History' && (
+        <div className="card overflow-hidden">
+          {planHistoryLoading ? (
+            <div className="p-8 text-center text-slate-500 text-sm animate-pulse">Loading plan history…</div>
+          ) : !planHistory || planHistory.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-sm">No plan changes recorded</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.06]">
+                    {['From', 'To', 'Changed By', 'Reason', 'Date'].map(h => (
+                      <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {planHistory.map((entry, i) => (
+                    <tr key={entry.id || i} className="border-b border-white/[0.04] table-row-hover">
+                      <td className="px-4 py-3"><span className="badge badge-gray text-[10px]">{entry.fromPlan?.toUpperCase()}</span></td>
+                      <td className="px-4 py-3"><span className="badge badge-indigo text-[10px]">{entry.toPlan?.toUpperCase()}</span></td>
+                      <td className="px-4 py-3 text-slate-300 text-xs">{entry.changedBy || '—'}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs">{entry.reason || '—'}</td>
+                      <td className="px-4 py-3 text-slate-500 text-xs">
+                        {entry.changedAt?.toDate ? entry.changedAt.toDate().toLocaleDateString() : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Change Plan Modal */}
+      <Modal isOpen={showChangePlan} onClose={() => setShowChangePlan(false)} title="Change Business Plan" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-400">Change the plan without requiring payment. This is immediate and logged.</p>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">New Plan</label>
+            <select value={newPlan} onChange={e => setNewPlan(e.target.value)} className="input-field w-full text-sm">
+              <option value="">— Select plan —</option>
+              {['trial', 'starter', 'growth', 'pro'].map(p => (
+                <option key={p} value={p}>{p.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Reason</label>
+            <textarea
+              value={planChangeReason}
+              onChange={e => setPlanChangeReason(e.target.value)}
+              placeholder="Reason for manual plan change..."
+              rows={2}
+              className="input-field w-full resize-none text-sm"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleChangePlan} disabled={changingPlan || !newPlan} className="flex-1 btn-primary justify-center flex items-center gap-2">
+              {changingPlan ? 'Changing…' : 'Confirm Change'}
+            </button>
+            <button onClick={() => setShowChangePlan(false)} className="btn-ghost flex-1 justify-center">Cancel</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Suspend Modal */}
       <Modal isOpen={actionModal === 'suspend'} onClose={() => setActionModal(null)} title="Suspend Business" size="sm">

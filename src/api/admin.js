@@ -307,6 +307,44 @@ export async function getPlatformAnalytics() {
   return res.data // { funnel, byCategory, byCity }
 }
 
+// ── Feature Overrides ───────────────────────────────────────────────────────
+
+/**
+ * @function    getFeatureOverrides
+ * @purpose     Returns plan features + admin overrides + audit log for a business
+ */
+export async function getFeatureOverrides(id) {
+  const res = await apiClient.get(`/admin/businesses/${id}/features`)
+  return res.data
+}
+
+/**
+ * @function    saveFeatureOverrides
+ * @purpose     Saves admin feature overrides for a business
+ */
+export async function saveFeatureOverrides(id, overrides) {
+  const res = await apiClient.put(`/admin/businesses/${id}/features`, { overrides })
+  return res.data
+}
+
+/**
+ * @function    changePlan
+ * @purpose     Admin-changes a business plan without payment
+ */
+export async function changePlan(id, plan, reason) {
+  const res = await apiClient.put(`/admin/businesses/${id}/plan`, { plan, reason })
+  return res.data
+}
+
+/**
+ * @function    getPlanHistory
+ * @purpose     Returns the plan change history for a business
+ */
+export async function getPlanHistory(id) {
+  const res = await apiClient.get(`/admin/businesses/${id}/plan-history`)
+  return res.data
+}
+
 // ─────────────────────────────────────────
 // EXPORTS
 // ─────────────────────────────────────────
