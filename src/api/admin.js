@@ -345,6 +345,18 @@ export async function getPlanHistory(id) {
   return res.data
 }
 
+// ── Exotel (Voice Telephony) ────────────────────────────────────────────────
+
+/**
+ * @function    getExotelHealth
+ * @purpose     Checks Exotel API connectivity and returns live health status
+ * @returns {Promise<{ service: string, ok: boolean, timestamp: string }>}
+ */
+export async function getExotelHealth() {
+  const res = await apiClient.get('/api/exotel/health')
+  return res.data // { service, ok, timestamp }
+}
+
 // ─────────────────────────────────────────
 // EXPORTS
 // ─────────────────────────────────────────

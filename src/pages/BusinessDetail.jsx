@@ -47,7 +47,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { getBusinessProfile, updateBusiness, suspendBusiness, getFeatureOverrides, saveFeatureOverrides, changePlan, getPlanHistory } from '../api/admin'
+import { getBusinessProfile, updateBusiness, suspendBusiness, getFeatureOverrides, saveFeatureOverrides, changePlan, getPlanHistory, getExotelHealth } from '../api/admin'
 import {
   ArrowLeft, MapPin, Tag, Star, Ban, AlertOctagon,
   Unlock, TrendingUp, MessageSquare, Edit2, Check,
@@ -128,6 +128,9 @@ export default function BusinessDetail() {
   const [planChangeReason, setPlanChangeReason] = useState('')
   const [changingPlan, setChangingPlan]     = useState(false)
 
+  // [STATE]: Exotel health (loaded lazily on Overview tab)
+  const [exotelHealth, setExotelHealth]     = useState(null)
+
   // ─────────────────────────────────────────
   // CORE LOGIC / HANDLER FUNCTIONS
   // ─────────────────────────────────────────
@@ -154,6 +157,13 @@ export default function BusinessDetail() {
   }, [id])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // [BUSINESS RULE]: Load Exotel health once on mount — non-blocking, non-fatal
+  useEffect(() => {
+    getExotelHealth()
+      .then(d => setExotelHealth(d))
+      .catch(() => setExotelHealth({ ok: false }))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // [BUSINESS RULE]: Load feature data once when Feature Control tab is activated.
   // featureError flag prevents infinite retries if the backend returns 404 (not deployed yet).
@@ -431,6 +441,9 @@ export default function BusinessDetail() {
                 { label: 'Plan', value: biz.plan?.toUpperCase() },
                 { label: 'Status', value: bStatus },
                 { label: 'Trial Active', value: biz.isTrialActive ? 'Yes' : 'No' },
+                { label: 'Missed Call Recovery', value: ['starter', 'growth', 'pro'].includes(biz.plan) ? '✓ On plan' : '✗ Not on plan' },
+                { label: 'AI Voice Receptionist', value: ['growth', 'pro'].includes(biz.plan) ? '✓ On plan' : '✗ Not on plan' },
+                { label: 'Exotel API', value: exotelHealth === null ? 'Checking…' : exotelHealth?.ok ? '✓ Healthy' : '✗ Unreachable' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0">
                   <span className="text-xs text-slate-500">{label}</span>
