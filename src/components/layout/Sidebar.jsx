@@ -1,124 +1,89 @@
-/**
- * @file        Sidebar.jsx
- * @module      Sidebar Navigation
- * @project     Admin-FrontEnd
- * @layer       Component
- * @description Fixed left sidebar component providing branded navigation links, active-route highlighting, logout functionality, and a profile shortcut.
- *
- * @updated     2026-05-28
- * @version     1.0.0
- *
- * @dependencies
- *   - react-router-dom (NavLink, useLocation, useNavigate)
- *   - ../../context/AuthContext (useAuth)
- *   - ../../context/ToastContext (useToast)
- *   - lucide-react (LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
- *                   DollarSign, Building2, Tag, Bell, Settings, Zap, ChevronRight, LogOut)
- *   - clsx
- *
- * @sideEffects
- *   - Calls logout() from AuthContext on sign-out — clears localStorage tokens
- *   - Dispatches a toast notification on logout
- *   - Navigates to /login on logout
- */
-
-/*
- * ╔══════════════════════════════════════════╗
- * ║           SDLC LIFECYCLE STATUS          ║
- * ╠══════════════════════════════════════════╣
- * ║ Planning     : ✅ Complete               ║
- * ║ Design       : ✅ Complete               ║
- * ║ Development  : ✅ Complete               ║
- * ║ Testing      : ⚠️  Partial              ║
- * ║ Deployment   : ✅ Complete               ║
- * ║ Maintenance  : 🔄 Active                ║
- * ╚══════════════════════════════════════════╝
- */
-
-// ─────────────────────────────────────────
-// IMPORTS & DEPENDENCIES
-// ─────────────────────────────────────────
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
+import { useSidebar } from '../../context/SidebarContext'
 import {
   LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
   DollarSign, Building2, Tag, Bell, Settings,
-  ChevronRight, LogOut
+  LogOut, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import clsx from 'clsx'
 
-// ─────────────────────────────────────────
-// CONSTANTS & CONFIG
-// ─────────────────────────────────────────
-
-/** Primary navigation items rendered in the sidebar menu */
-const navItems = [
+const NAV = [
   { path: '/',            label: 'Dashboard',   icon: LayoutDashboard },
-  { path: '/bookings',    label: 'Bookings',     icon: CalendarCheck },
-  { path: '/analytics',   label: 'Analytics',    icon: BarChart3 },
-  { path: '/billing',     label: 'Billing',      icon: CreditCard },
-  { path: '/commissions', label: 'Commissions',  icon: DollarSign },
-  { path: '/businesses',  label: 'Businesses',   icon: Building2 },
-  { path: '/categories',  label: 'Categories',   icon: Tag },
-  { path: '/alerts',      label: 'Alerts',       icon: Bell },
-  { path: '/settings',    label: 'Settings',     icon: Settings },
+  { path: '/bookings',    label: 'Bookings',     icon: CalendarCheck   },
+  { path: '/analytics',   label: 'Analytics',    icon: BarChart3       },
+  { path: '/billing',     label: 'Billing',      icon: CreditCard      },
+  { path: '/commissions', label: 'Commissions',  icon: DollarSign      },
+  { path: '/businesses',  label: 'Businesses',   icon: Building2       },
+  { path: '/categories',  label: 'Categories',   icon: Tag             },
+  { path: '/alerts',      label: 'Alerts',       icon: Bell            },
+  { path: '/settings',    label: 'Settings',     icon: Settings        },
 ]
 
-// ─────────────────────────────────────────
-// EXPORTS
-// ─────────────────────────────────────────
-
-/**
- * @function    Sidebar
- * @purpose     Renders the fixed left sidebar with logo, navigation links, logout button, and admin profile chip
- * @returns {JSX.Element} Fixed-position sidebar element
- */
 export default function Sidebar() {
   const location = useLocation()
   const navigate  = useNavigate()
-  // [AUTH]: Read admin profile and logout action from auth context
-  const { admin, logout } = useAuth()
-  // [CONTEXT]: Use toast to confirm logout action to the user
-  const { addToast } = useToast()
+  const { admin, logout }     = useAuth()
+  const { addToast }          = useToast()
+  const { collapsed, setCollapsed } = useSidebar()
 
-  /**
-   * @function    handleLogout
-   * @purpose     Logs the admin out, shows a confirmation toast, and redirects to the login page
-   * @returns {void}
-   */
+  const initials = admin?.name
+    ? admin.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'AD'
+
   const handleLogout = () => {
-    // [AUTH]: Clear session state via context then navigate to login
     logout()
     addToast('Logged out successfully', 'info')
     navigate('/login', { replace: true })
   }
 
-  // Get initials from name
-  const initials = admin?.name
-    ? admin.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'AD'
+  const W = collapsed ? 80 : 260
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[220px] bg-gradient-sidebar border-r border-white/[0.05] flex flex-col z-50">
-
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-white/[0.05]">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Zyntell" className="w-9 h-9 object-contain flex-shrink-0" />
-          <div>
-            <h1 className="font-display text-white text-[17px] font-bold tracking-wide leading-none">ZYNTELL</h1>
-            <p className="text-[10px] text-slate-500 mt-0.5 tracking-widest uppercase">AI Platform</p>
+    <aside
+      className="sidebar-transition fixed left-0 top-0 h-screen flex flex-col z-50 overflow-hidden"
+      style={{
+        width: W,
+        background: 'linear-gradient(180deg, #0D1117 0%, #080B12 100%)',
+        borderRight: '1px solid rgba(255,255,255,0.05)',
+      }}
+    >
+      {/* ── Brand ────────────────────────────────────────────── */}
+      <div
+        className="flex items-center px-4 py-5 flex-shrink-0"
+        style={{
+          borderBottom:  '1px solid rgba(255,255,255,0.04)',
+          minHeight:     64,
+          gap:           collapsed ? 0 : 12,
+          justifyContent: collapsed ? 'center' : 'flex-start',
+        }}
+      >
+        <img src="/logo.png" alt="Zyntell" className="w-8 h-8 object-contain flex-shrink-0" />
+        {!collapsed && (
+          <div className="overflow-hidden">
+            <p
+              className="font-bold leading-none"
+              style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--silver)', letterSpacing: '0.08em' }}
+            >
+              ZYNTELL
+            </p>
+            <p className="text-[9px] mt-0.5 tracking-widest uppercase" style={{ color: 'var(--silver-5)' }}>
+              AI Platform
+            </p>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        <p className="text-[9px] font-semibold text-slate-600 tracking-widest uppercase px-2 mb-3">Main Menu</p>
+      {/* ── Nav ──────────────────────────────────────────────── */}
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3">
+        {!collapsed && (
+          <p className="px-2 mb-2 text-[9px] font-bold tracking-widest uppercase" style={{ color: 'var(--silver-5)' }}>
+            Main Menu
+          </p>
+        )}
         <ul className="space-y-0.5">
-          {navItems.map(({ path, label, icon: Icon, badge }) => {
-            // [CONTEXT]: Exact match for root, prefix match for all other routes
+          {NAV.map(({ path, label, icon: Icon }) => {
             const isActive = path === '/'
               ? location.pathname === '/'
               : location.pathname.startsWith(path)
@@ -127,28 +92,33 @@ export default function Sidebar() {
               <li key={path}>
                 <NavLink
                   to={path}
+                  title={collapsed ? label : undefined}
                   className={clsx(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 relative group',
-                    isActive
-                      ? 'nav-item-active text-white'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+                    'flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 relative group',
+                    collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5',
+                    isActive ? 'nav-item-active' : 'text-[var(--silver-4)] hover:text-[var(--silver-2)] hover:bg-white/[0.03]'
                   )}
                 >
-                  <Icon
-                    size={16}
-                    className={clsx(
-                      'flex-shrink-0 transition-colors',
-                      isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
-                    )}
-                  />
-                  <span className="flex-1">{label}</span>
-                  {badge && (
-                    <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                      {badge}
-                    </span>
-                  )}
+                  {/* Left aurora accent bar */}
                   {isActive && (
-                    <ChevronRight size={12} className="text-indigo-400 opacity-60" />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: 0, top: '20%', bottom: '20%',
+                        width: 2,
+                        borderRadius: '0 2px 2px 0',
+                        background: 'linear-gradient(180deg, var(--aurora), var(--violet))',
+                        boxShadow: '0 0 6px var(--aurora-glow)',
+                      }}
+                    />
+                  )}
+                  <Icon
+                    size={17}
+                    className="flex-shrink-0 transition-colors"
+                    style={{ color: isActive ? 'var(--aurora)' : undefined }}
+                  />
+                  {!collapsed && (
+                    <span className="flex-1 truncate">{label}</span>
                   )}
                 </NavLink>
               </li>
@@ -157,33 +127,71 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      {/* Bottom — User info + Logout */}
-      <div className="px-3 py-4 border-t border-white/[0.05] space-y-2">
-
-        {/* Logout button */}
+      {/* ── Bottom ───────────────────────────────────────────── */}
+      <div
+        className="flex-shrink-0 px-2 py-3 space-y-1"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+      >
+        {/* Logout */}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150 group"
+          title={collapsed ? 'Sign Out' : undefined}
+          className={clsx(
+            'w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 group py-2',
+            collapsed ? 'justify-center px-2' : 'px-3'
+          )}
+          style={{ color: 'var(--silver-4)' }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--crimson-light)'; e.currentTarget.style.background = 'var(--crimson-dim)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--silver-4)'; e.currentTarget.style.background = '' }}
         >
-          <LogOut size={15} className="flex-shrink-0 group-hover:text-red-400 transition-colors" />
-          <span>Sign Out</span>
+          <LogOut size={16} className="flex-shrink-0" />
+          {!collapsed && <span>Sign Out</span>}
         </button>
-        {/* User info — clicking goes to profile */}
+
+        {/* Profile chip */}
         <button
           onClick={() => navigate('/profile')}
-          className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/[0.04] transition-all group"
+          title={collapsed ? admin?.name || 'Profile' : undefined}
+          className={clsx(
+            'w-full flex items-center gap-2.5 rounded-lg transition-all duration-150 py-2',
+            collapsed ? 'justify-center px-2' : 'px-2'
+          )}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+          onMouseLeave={e => e.currentTarget.style.background = ''}
         >
-          <div className="w-8 h-8 rounded-full bg-gradient-indigo flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #2563EB, #7C3AED)' }}
+          >
             {initials}
           </div>
-          <div className="min-w-0 flex-1 text-left">
-            <p className="text-xs font-semibold text-white truncate group-hover:text-indigo-300 transition-colors">
-              {admin?.name || 'Admin'}
-            </p>
-            <p className="text-[10px] text-slate-500 truncate">{admin?.role || 'SUPER_ADMIN'}</p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-xs font-semibold truncate" style={{ color: 'var(--silver-2)' }}>
+                {admin?.name || 'Admin'}
+              </p>
+              <p className="text-[10px] truncate" style={{ color: 'var(--silver-5)' }}>
+                {admin?.role || 'SUPER_ADMIN'}
+              </p>
+            </div>
+          )}
+        </button>
 
-          <ChevronRight size={12} className="text-slate-600 group-hover:text-indigo-400 flex-shrink-0 transition-colors" />
+        {/* Collapse toggle */}
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className={clsx(
+            'w-full flex items-center gap-2 rounded-lg py-2 text-xs font-medium transition-all duration-150',
+            collapsed ? 'justify-center px-2' : 'px-3'
+          )}
+          style={{ color: 'var(--silver-5)' }}
+          onMouseEnter={e => e.currentTarget.style.color = 'var(--silver-3)'}
+          onMouseLeave={e => e.currentTarget.style.color = 'var(--silver-5)'}
+        >
+          {collapsed
+            ? <ChevronRight size={14} />
+            : <><ChevronLeft size={14} /><span>Collapse</span></>
+          }
         </button>
       </div>
     </aside>

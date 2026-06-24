@@ -1,182 +1,202 @@
-/**
- * @file        TopNav.jsx
- * @module      Top Navigation
- * @project     Admin-FrontEnd
- * @layer       Component
- * @description Sticky top navigation bar showing the page title, command palette trigger, refresh button, live notification bell, and admin user chip.
- *
- * @updated     2026-05-29
- * @version     1.0.0
- *
- * @dependencies
- *   - react (useState, useEffect)
- *   - lucide-react (Bell, RefreshCw, ChevronDown, X, Zap)
- *   - ../../data/mockData (notifications)
- *   - ../../context/AuthContext (useAuth)
- *   - clsx
- *
- * @sideEffects
- *   - setInterval that injects a simulated notification every 30 seconds
- *   - Dispatches 'openCommandPalette' CustomEvent on search button click
- */
-
-/*
- * ╔══════════════════════════════════════════╗
- * ║           SDLC LIFECYCLE STATUS          ║
- * ╠══════════════════════════════════════════╣
- * ║ Planning     : ✅ Complete               ║
- * ║ Design       : ✅ Complete               ║
- * ║ Development  : ✅ Complete               ║
- * ║ Testing      : ⚠️  Partial              ║
- * ║ Deployment   : ✅ Complete               ║
- * ║ Maintenance  : 🔄 Active                ║
- * ╚══════════════════════════════════════════╝
- */
-
-// ─────────────────────────────────────────
-// IMPORTS & DEPENDENCIES
-// ─────────────────────────────────────────
 import { useState, useEffect } from 'react'
-import { Bell, RefreshCw, ChevronDown, X, Zap } from 'lucide-react'
+import { Bell, X, Search } from 'lucide-react'
 import { notifications } from '../../data/mockData'
 import { useAuth } from '../../context/AuthContext'
 import clsx from 'clsx'
 
-// ─────────────────────────────────────────
-// EXPORTS
-// ─────────────────────────────────────────
+const TYPE_COLOR = {
+  alert:   'var(--crimson)',
+  payment: 'var(--amber)',
+  booking: 'var(--aurora)',
+  trial:   'var(--violet-light)',
+  system:  'var(--silver-4)',
+}
 
-/**
- * @function    TopNav
- * @purpose     Renders the sticky top navigation bar with page title, search trigger, notifications panel, and admin user chip
- * @param  {string} title - The current page title to display in the header
- * @returns {JSX.Element} Sticky header element
- */
 export default function TopNav({ title }) {
-  // [STATE]: Controls whether the notification dropdown panel is visible
-  const [notifOpen, setNotifOpen] = useState(false)
-  // [STATE]: Local copy of notification list; extended at runtime by the 30 s interval
-  const [notifs, setNotifs] = useState(notifications)
-  // [STATE]: Pulse flag toggled true for 2 s whenever a new notification arrives
-  const [pulse, setPulse] = useState(false)
+  const [notifOpen, setNotifOpen]   = useState(false)
+  const [notifs,    setNotifs]      = useState(notifications)
+  const [pulse,     setPulse]       = useState(false)
   const unread = notifs.filter(n => !n.read).length
-  // [AUTH]: Read admin name for the user chip in the top right
   const { admin } = useAuth()
 
-  // [UI]: Simulate a new notification every 30s
   useEffect(() => {
     const t = setInterval(() => {
       setPulse(true)
-      // [CONTEXT]: Prepend a synthetic notification and cap the list at 10 items
       setNotifs(prev => [{
-        id: Date.now(),
-        type: 'booking',
-        message: `New booking spike detected — ${['MedCare Clinic', 'Spice Route', 'Wellness Hub'][Math.floor(Math.random() * 3)]}`,
-        time: 'Just now',
-        read: false,
+        id:      Date.now(),
+        type:    'booking',
+        message: `New booking — ${['Sunrise Dental', 'Apollo Clinic', 'CareFirst'][Math.floor(Math.random() * 3)]}`,
+        time:    'Just now',
+        read:    false,
       }, ...prev.slice(0, 9)])
       setTimeout(() => setPulse(false), 2000)
     }, 30000)
     return () => clearInterval(t)
   }, [])
 
-  /**
-   * @function    markAllRead
-   * @purpose     Marks all notifications in local state as read
-   * @returns {void}
-   */
   const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, read: true })))
 
-  // [UI]: Color map for notification dot indicators by type
-  const typeColors = {
-    alert: 'bg-red-500',
-    payment: 'bg-amber-500',
-    booking: 'bg-indigo-500',
-    trial: 'bg-orange-500',
-    system: 'bg-slate-500',
-  }
+  const initials = admin?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AD'
 
   return (
-    <header className="sticky top-0 z-40 h-14 bg-[#0B0F1A]/95 backdrop-blur-sm border-b border-white/[0.05] flex items-center gap-3 px-6">
-      <div className="flex-1">
-        <h2 className="font-display font-semibold text-white text-[15px]">{title}</h2>
-      </div>
+    <header className="sticky top-0 z-40 px-4 py-2.5">
+      {/* Floating nav pill */}
+      <div className="topnav-float flex items-center gap-3 px-4 h-11">
 
-      {/* [UI]: Cmd+K Search trigger — fires custom event consumed by CommandPalette */}
-      <button
-        onClick={() => window.dispatchEvent(new CustomEvent('openCommandPalette'))}
-        className="flex items-center gap-2 text-slate-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.07] px-3 py-1.5 rounded-lg text-sm transition-all border border-white/[0.06] group"
-      >
-        <Zap size={12} className="text-indigo-400" />
-        <span className="text-xs text-slate-500">Search anything...</span>
-        <div className="flex items-center gap-0.5 ml-2">
-          <kbd className="text-[10px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded font-mono text-slate-600">⌘</kbd>
-          <kbd className="text-[10px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded font-mono text-slate-600">K</kbd>
-        </div>
-      </button>
-
-      {/* [UI]: Refresh button */}
-      <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-all border border-white/[0.06]">
-        <RefreshCw size={13} />
-      </button>
-
-      {/* [UI]: Notifications bell with unread badge and dropdown panel */}
-      <div className="relative">
-        <button
-          onClick={() => setNotifOpen(o => !o)}
-          className="relative w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-all border border-white/[0.06]"
+        {/* Page title */}
+        <h2
+          className="font-semibold text-sm flex-shrink-0"
+          style={{ fontFamily: 'var(--font-display)', color: 'var(--silver)', letterSpacing: '-0.01em' }}
         >
-          <Bell size={14} className={pulse ? 'text-indigo-400' : ''} />
-          {unread > 0 && (
-            <span className={clsx('absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center', pulse && 'animate-ping-once')}>
-              {unread}
-            </span>
-          )}
+          {title}
+        </h2>
+
+        {/* Divider */}
+        <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--border-bright)' }} />
+
+        {/* AI Search — "Ask Zyntell anything" */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('openCommandPalette'))}
+          className="flex items-center gap-2 flex-1 min-w-0 px-3 py-1.5 rounded-lg text-xs transition-all duration-150 text-left"
+          style={{
+            background:   'rgba(255,255,255,0.03)',
+            border:       '1px solid rgba(255,255,255,0.05)',
+            color:        'var(--silver-4)',
+            maxWidth:     320,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background    = 'rgba(59,130,246,0.05)'
+            e.currentTarget.style.borderColor   = 'rgba(59,130,246,0.18)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background    = 'rgba(255,255,255,0.03)'
+            e.currentTarget.style.borderColor   = 'rgba(255,255,255,0.05)'
+          }}
+        >
+          <Search size={12} style={{ color: 'var(--silver-5)', flexShrink: 0 }} />
+          <span className="truncate">Ask Zyntell anything...</span>
+          <div className="flex items-center gap-0.5 ml-auto flex-shrink-0">
+            <kbd className="text-[9px] px-1 py-0.5 rounded font-mono"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--silver-5)' }}>
+              ⌘K
+            </kbd>
+          </div>
         </button>
 
-        {notifOpen && (
-          <div className="absolute right-0 top-10 w-80 bg-[#0F1629] border border-white/[0.08] rounded-xl shadow-2xl z-50 animate-fade-in overflow-hidden">
-            <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
-              <span className="text-sm font-semibold text-white">Notifications</span>
-              <div className="flex items-center gap-2">
-                <button onClick={markAllRead} className="text-[10px] text-indigo-400 hover:text-indigo-300">Mark all read</button>
-                <button onClick={() => setNotifOpen(false)}><X size={13} className="text-slate-500 hover:text-white" /></button>
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Notification bell */}
+        <div className="relative flex-shrink-0">
+          <button
+            onClick={() => setNotifOpen(o => !o)}
+            className="btn-icon relative"
+            style={unread > 0 ? { borderColor: 'rgba(59,130,246,0.2)' } : {}}
+          >
+            <Bell size={14} style={{ color: pulse ? 'var(--aurora)' : 'var(--silver-4)', transition: 'color 300ms' }} />
+            {unread > 0 && (
+              <>
+                <span
+                  className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full text-white font-bold"
+                  style={{ fontSize: 9, background: 'var(--crimson)', zIndex: 1 }}
+                >
+                  {unread > 9 ? '9+' : unread}
+                </span>
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full"
+                  style={{ background: 'var(--crimson)', animation: 'notif-ping 1.5s ease-out infinite', opacity: 0.5 }}
+                />
+              </>
+            )}
+          </button>
+
+          {notifOpen && (
+            <div
+              className="absolute right-0 top-10 w-80 rounded-xl overflow-hidden z-50 animate-fade-in"
+              style={{
+                background: 'var(--surface-2)',
+                border:     '1px solid rgba(59,130,246,0.15)',
+                boxShadow:  'var(--shadow-panel)',
+              }}
+            >
+              <div
+                className="px-4 py-3 flex items-center justify-between"
+                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+              >
+                <span className="text-sm font-semibold" style={{ color: 'var(--silver)' }}>Notifications</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={markAllRead}
+                    className="text-[10px] font-medium transition-colors"
+                    style={{ color: 'var(--aurora-light)' }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--aurora)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--aurora-light)'}
+                  >
+                    Mark all read
+                  </button>
+                  <button onClick={() => setNotifOpen(false)} className="btn-icon w-6 h-6">
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto">
+                {notifs.map(n => (
+                  <div
+                    key={n.id}
+                    onClick={() => setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
+                    className="px-4 py-3 cursor-pointer transition-colors flex items-start gap-3"
+                    style={{
+                      borderBottom:   '1px solid rgba(255,255,255,0.03)',
+                      background:     !n.read ? 'rgba(59,130,246,0.04)' : '',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    onMouseLeave={e => e.currentTarget.style.background = !n.read ? 'rgba(59,130,246,0.04)' : ''}
+                  >
+                    <div className="mt-1.5 flex-shrink-0 relative">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: TYPE_COLOR[n.type] || 'var(--silver-4)' }} />
+                      {!n.read && (
+                        <div className="absolute inset-0 rounded-full"
+                          style={{ background: TYPE_COLOR[n.type], animation: 'pulse 2s ease-out infinite', opacity: 0.5 }} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs leading-relaxed" style={{ color: 'var(--silver-3)' }}>{n.message}</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--silver-5)' }}>{n.time}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className="px-4 py-2.5 text-center"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+              >
+                <button className="text-xs font-medium transition-colors" style={{ color: 'var(--aurora-light)' }}>
+                  View all
+                </button>
               </div>
             </div>
-            <div className="max-h-72 overflow-y-auto divide-y divide-white/[0.04]">
-              {notifs.map(n => (
-                <div key={n.id}
-                  // [CONTEXT]: Mark individual notification as read on click
-                  onClick={() => setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
-                  className={clsx('px-4 py-3 hover:bg-white/[0.03] cursor-pointer transition-colors flex items-start gap-3', !n.read && 'bg-indigo-500/5')}>
-                  <div className="mt-1.5 flex-shrink-0 relative">
-                    <div className={clsx('w-2 h-2 rounded-full', typeColors[n.type] || 'bg-slate-500')} />
-                    {!n.read && <div className={clsx('absolute inset-0 rounded-full animate-ping opacity-60', typeColors[n.type] || 'bg-slate-500')} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-300 leading-relaxed">{n.message}</p>
-                    <p className="text-[10px] text-slate-600 mt-0.5">{n.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-2.5 border-t border-white/[0.05] text-center">
-              <button className="text-xs text-indigo-400 hover:text-indigo-300">View all notifications</button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* [AUTH]: Admin user chip — displays avatar initials and first name from AuthContext */}
-      <button className="flex items-center gap-2 hover:bg-white/[0.04] px-2 py-1.5 rounded-lg transition-all">
-        <div className="w-7 h-7 rounded-full bg-gradient-indigo flex items-center justify-center text-[11px] font-bold text-white">
-          {admin?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AD'}
+          )}
         </div>
-        <span className="text-sm text-slate-300 font-medium">
-          {admin?.name?.split(' ')[0] || 'Admin'}
-        </span>
-        <ChevronDown size={12} className="text-slate-500" />
-      </button>
+
+        {/* Admin chip */}
+        <button
+          className="flex items-center gap-2 px-2 py-1 rounded-lg transition-all duration-150 flex-shrink-0"
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+          onMouseLeave={e => e.currentTarget.style.background = ''}
+        >
+          <div
+            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+            style={{ background: 'linear-gradient(135deg, #2563EB, #7C3AED)' }}
+          >
+            {initials}
+          </div>
+          <span className="text-xs font-medium hidden sm:block" style={{ color: 'var(--silver-3)' }}>
+            {admin?.name?.split(' ')[0] || 'Admin'}
+          </span>
+        </button>
+      </div>
     </header>
   )
 }

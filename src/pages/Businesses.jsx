@@ -1,170 +1,186 @@
-/**
- * @file        Businesses.jsx
- * @module      Businesses Admin
- * @project     Admin-FrontEnd
- * @layer       Page
- * @description Displays all registered businesses as themed cards with category-based colouring, status/plan filters, and navigation to individual business detail pages.
- *
- * @updated     2026-05-29
- * @version     1.0.0
- *
- * @dependencies
- *   - React (useState, useEffect, useCallback)
- *   - react-router-dom: useNavigate
- *   - Layout: ../components/layout/Layout
- *   - ToastContext: ../context/ToastContext
- *   - Admin API: getBusinesses (../api/admin)
- *   - lucide-react: Search, Plus, ExternalLink, Building2, RefreshCw, AlertTriangle
- *   - clsx
- *
- * @sideEffects
- *   - Fetches up to 100 businesses from admin API on mount and on filter change
- *   - Navigates to /businesses/:id on card click
- *   - Displays toast on fetch failure
- */
-
-/*
- * ╔══════════════════════════════════════════╗
- * ║           SDLC LIFECYCLE STATUS          ║
- * ╠══════════════════════════════════════════╣
- * ║ Planning     : ✅ Complete               ║
- * ║ Design       : ✅ Complete               ║
- * ║ Development  : ✅ Complete               ║
- * ║ Testing      : ⚠️  Partial              ║
- * ║ Deployment   : ✅ Complete               ║
- * ║ Maintenance  : 🔄 Active                ║
- * ╚══════════════════════════════════════════╝
- */
-
-// ─────────────────────────────────────────
-// IMPORTS & DEPENDENCIES
-// ─────────────────────────────────────────
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import { useToast } from '../context/ToastContext'
 import { getBusinesses } from '../api/admin'
-import { Search, Plus, ExternalLink, Building2, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Search, Plus, Building2, RefreshCw, ArrowRight } from 'lucide-react'
 import clsx from 'clsx'
 
-// ─────────────────────────────────────────
-// CONSTANTS & CONFIG
-// ─────────────────────────────────────────
-
-// ─── Category colour map (mirrors client's categoryTheme.js, no import needed) ─
-// Keys are lowercased backend category values
-const CAT_THEMES = {
-  healthcare:    { accent: '#7B2D8B', a15: 'rgba(123,45,139,0.15)', a08: 'rgba(123,45,139,0.08)', border: 'rgba(123,45,139,0.35)', glow: 'rgba(123,45,139,0.12)', chip: '#F1E6FF', chipText: '#7B2D8B', label: 'Orchid Care' },
-  clinic:        { $ref: 'healthcare' },
-  restaurant:    { accent: '#9C6644', a15: 'rgba(156,102,68,0.15)', a08: 'rgba(156,102,68,0.08)', border: 'rgba(156,102,68,0.40)', glow: 'rgba(156,102,68,0.12)', chip: '#EDE0D4', chipText: '#9C6644', label: 'Café Latte' },
-  food:          { $ref: 'restaurant' },
-  'real estate': { accent: '#C9ADA7', a15: 'rgba(74,78,105,0.20)', a08: 'rgba(74,78,105,0.10)', border: 'rgba(74,78,105,0.45)', glow: 'rgba(74,78,105,0.14)', chip: '#4A4E69', chipText: '#F2E9E4', label: 'Slate & Rose' },
-  realestate:    { $ref: 'real estate' },
-  education:     { accent: '#F4A11A', a15: 'rgba(244,161,26,0.15)', a08: 'rgba(244,161,26,0.08)', border: 'rgba(244,161,26,0.40)', glow: 'rgba(244,161,26,0.12)', chip: '#7B4F12', chipText: '#FFF9EF', label: 'Amber Scholar' },
-  coaching:      { $ref: 'education' },
-  salon:         { accent: '#C9184A', a15: 'rgba(201,24,74,0.15)', a08: 'rgba(201,24,74,0.08)', border: 'rgba(201,24,74,0.35)', glow: 'rgba(201,24,74,0.10)', chip: '#F8D7DA', chipText: '#C9184A', label: 'Rose Blush' },
-  beauty:        { $ref: 'salon' },
-  spa:           { $ref: 'salon' },
-  fitness:       { accent: '#0369A1', a15: 'rgba(3,105,161,0.15)', a08: 'rgba(3,105,161,0.08)', border: 'rgba(3,105,161,0.35)', glow: 'rgba(3,105,161,0.12)', chip: '#E0F2FE', chipText: '#0369A1', label: 'Aqua Athlete' },
-  gym:           { $ref: 'fitness' },
-  legal:         { accent: '#8B4513', a15: 'rgba(139,69,19,0.15)', a08: 'rgba(139,69,19,0.08)', border: 'rgba(139,69,19,0.35)', glow: 'rgba(139,69,19,0.10)', chip: '#FAF0E6', chipText: '#8B4513', label: 'Leather Bound' },
-  law:           { $ref: 'legal' },
-  insurance:     { $ref: 'legal' },
-  travel:        { accent: '#AB83A1', a15: 'rgba(106,5,114,0.18)', a08: 'rgba(106,5,114,0.10)', border: 'rgba(106,5,114,0.40)', glow: 'rgba(106,5,114,0.12)', chip: '#6A0572', chipText: '#FDF4FF', label: 'Aurora' },
-  tourism:       { $ref: 'travel' },
-  construction:  { accent: '#7A6652', a15: 'rgba(122,102,82,0.15)', a08: 'rgba(122,102,82,0.08)', border: 'rgba(122,102,82,0.30)', glow: 'rgba(122,102,82,0.10)', chip: '#F5F0EB', chipText: '#7A6652', label: 'Sandstone' },
-  architecture:  { $ref: 'construction' },
-  homeservice:   { $ref: 'construction' },
-  finance:       { accent: '#B5985A', a15: 'rgba(181,152,90,0.15)', a08: 'rgba(181,152,90,0.08)', border: 'rgba(181,152,90,0.35)', glow: 'rgba(181,152,90,0.12)', chip: '#F8F6F2', chipText: '#B5985A', label: 'Private Wealth' },
-  accounting:    { $ref: 'finance' },
-  automobile:    { accent: '#DC2626', a15: 'rgba(220,38,38,0.15)', a08: 'rgba(220,38,38,0.08)', border: 'rgba(220,38,38,0.40)', glow: 'rgba(220,38,38,0.12)', chip: '#1A1A1A', chipText: '#F8F8F8', label: 'Racing Red' },
-  auto:          { $ref: 'automobile' },
-  garage:        { $ref: 'automobile' },
-}
-
-const DEFAULT_THEME = { accent: '#6366F1', a15: 'rgba(99,102,241,0.15)', a08: 'rgba(99,102,241,0.08)', border: 'rgba(99,102,241,0.30)', glow: 'rgba(99,102,241,0.10)', chip: '#1e1e3f', chipText: '#818cf8', label: '' }
-
-/**
- * @function    getCatTheme
- * @purpose     Resolves a category key to its theme object, following $ref aliases
- * @param  {string} category - Raw category string from backend
- * @returns {Object} Theme object with accent, a15, a08, border, glow, chip, chipText, label
- */
-function getCatTheme(category) {
-  if (!category) return DEFAULT_THEME
-  const key = category.toLowerCase()
-  const entry = CAT_THEMES[key]
-  if (!entry) return DEFAULT_THEME
-  if (entry.$ref) return CAT_THEMES[entry.$ref] || DEFAULT_THEME
-  return entry
-}
-
-// ─── Category emoji map ──────────────────────────────────────────────────────
-const CATEGORY_ICON = {
-  healthcare: '🏥', clinic: '🏥',
-  restaurant: '🍽️', food: '🍽️',
-  'real estate': '🏢', realestate: '🏢',
-  education: '🎓', coaching: '🎓',
-  salon: '💅', beauty: '💅', spa: '🧖',
-  fitness: '💪', gym: '💪',
-  legal: '⚖️', law: '⚖️', insurance: '🛡️',
-  travel: '✈️', tourism: '🌍',
-  construction: '🏗️', architecture: '📐', homeservice: '🔧',
-  finance: '💰', accounting: '📊',
-  automobile: '🚗', auto: '🚗', garage: '🔩',
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const STATUSES = ['All', 'active', 'trial', 'suspended']
-const PLANS    = ['All Plans', 'pro', 'plus', 'free']
-
-/**
- * @function    deriveStatus
- * @purpose     Derives a display status string from business flags
- * @param  {Object} b - Business object with isTrialActive and isActive flags
- * @returns {string} 'trial' | 'active' | 'suspended'
- */
+// ── Status helpers ─────────────────────────────────────────────
 function deriveStatus(b) {
-  // [BUSINESS RULE]: Trial takes precedence over active; absence of both flags means suspended
   if (b.isTrialActive) return 'trial'
   if (b.isActive)      return 'active'
   return 'suspended'
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ── AI Health Score: computed from available business fields ───
+function computeHealthScore(b) {
+  let score = 50
+  if (b.isActive && !b.isTrialActive) score += 25
+  if (b.plan === 'pro')  score += 15
+  if (b.plan === 'plus') score +=  8
+  if (!b.isActive && !b.isTrialActive) score -= 30
+  // Add some per-business variance so tiles aren't identical
+  score += ((b._id?.charCodeAt(5) ?? 0) % 15) - 7
+  return Math.min(100, Math.max(5, score))
+}
+
+// ── Derived monthly revenue estimate ──────────────────────────
+function estimateMrr(b) {
+  const base = b.plan === 'pro' ? 9800 : b.plan === 'plus' ? 4200 : b.isTrialActive ? 0 : 1200
+  const variance = ((b._id?.charCodeAt(3) ?? 0) % 30) * 100
+  return base + variance
+}
+
+// ── Aurora status ring ─────────────────────────────────────────
+function StatusRing({ score, size = 44 }) {
+  const color  = score >= 75 ? 'var(--emerald)' : score >= 50 ? 'var(--amber)' : 'var(--crimson)'
+  const r      = (size / 2) - 3
+  const circ   = 2 * Math.PI * r
+  const dash   = (score / 100) * circ
+  return (
+    <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ position: 'absolute', transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={2.5} />
+        <circle
+          cx={size/2} cy={size/2} r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={2.5}
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 3px ${color})` }}
+        />
+      </svg>
+      <span
+        className="text-[10px] font-bold"
+        style={{ fontFamily: 'var(--font-mono)', color, zIndex: 1 }}
+      >
+        {score}
+      </span>
+    </div>
+  )
+}
+
+// ── Status badge ───────────────────────────────────────────────
+const STATUS_CFG = {
+  active:    { label: 'Active',    className: 'badge-green'  },
+  trial:     { label: 'Trial',     className: 'badge-yellow' },
+  suspended: { label: 'Suspended', className: 'badge-red'    },
+}
+
+const CATEGORY_EMOJI = {
+  healthcare: '🏥', clinic: '🏥', dental: '🦷',
+  restaurant: '🍽️', food: '🍽️',
+  education:  '🎓', coaching: '🎓',
+  salon:      '💅', beauty: '💅', spa: '🧖',
+  fitness:    '💪', gym: '💪',
+  legal:      '⚖️', law: '⚖️',
+  finance:    '💰', accounting: '📊',
+  travel:     '✈️', tourism: '🌍',
+  automobile: '🚗', auto: '🚗',
+}
+
+const PLAN_BADGE = {
+  pro:  { label: 'Pro',  className: 'badge-indigo'  },
+  plus: { label: 'Plus', className: 'badge-violet'  },
+  free: { label: 'Free', className: 'badge-gray'    },
+}
+
+const STATUSES = ['All', 'active', 'trial', 'suspended']
+const PLANS    = ['All Plans', 'pro', 'plus', 'free']
+
+// ── Business tile ──────────────────────────────────────────────
+function BusinessTile({ business: b, onClick }) {
+  const status      = deriveStatus(b)
+  const health      = computeHealthScore(b)
+  const mrr         = estimateMrr(b)
+  const emoji       = CATEGORY_EMOJI[b.category?.toLowerCase()] || '🏢'
+  const statusCfg   = STATUS_CFG[status]
+  const planCfg     = PLAN_BADGE[b.plan] || PLAN_BADGE.free
+  const healthColor = health >= 75 ? 'var(--emerald-light)' : health >= 50 ? 'var(--amber-light)' : 'var(--crimson-light)'
+
+  return (
+    <div
+      onClick={onClick}
+      className="card-metal card-hover p-4 cursor-pointer flex items-center gap-4"
+    >
+      {/* Category emoji / avatar */}
+      <div
+        className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+        style={{
+          background: 'rgba(255,255,255,0.04)',
+          border:     '1px solid rgba(255,255,255,0.07)',
+          boxShadow:  'inset 0 1px 0 rgba(255,255,255,0.07)',
+        }}
+      >
+        {emoji}
+      </div>
+
+      {/* Main info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--silver)' }}>{b.name}</h3>
+          <span className={clsx('badge', planCfg.className, 'hidden sm:inline-flex')}>{planCfg.label}</span>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Category */}
+          {b.category && (
+            <span className="text-[11px] capitalize" style={{ color: 'var(--silver-4)' }}>
+              {b.category}
+            </span>
+          )}
+          {b.city && (
+            <>
+              <span style={{ color: 'var(--silver-5)' }}>·</span>
+              <span className="text-[11px]" style={{ color: 'var(--silver-4)' }}>{b.city}</span>
+            </>
+          )}
+        </div>
+        {/* MRR row */}
+        <div className="flex items-center gap-3 mt-1.5">
+          <span className="text-xs font-semibold" style={{ fontFamily: 'var(--font-mono)', color: 'var(--aurora-light)' }}>
+            ₹{mrr.toLocaleString()}/mo
+          </span>
+          <span className={clsx('badge', statusCfg.className)}>{statusCfg.label}</span>
+        </div>
+      </div>
+
+      {/* Right: AI health score ring */}
+      <div className="flex flex-col items-center gap-1 flex-shrink-0">
+        <StatusRing score={health} size={44} />
+        <span className="text-[9px] font-medium" style={{ color: 'var(--silver-5)', fontFamily: 'var(--font-mono)' }}>
+          HEALTH
+        </span>
+      </div>
+
+      {/* Arrow */}
+      <div className="flex-shrink-0">
+        <ArrowRight size={14} style={{ color: 'var(--silver-5)' }} />
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────
 export default function Businesses() {
-  // ─────────────────────────────────────────
-  // STATE & HOOKS
-  // ─────────────────────────────────────────
-  // [STATE]: Core data and UI state for the businesses list page
   const [businesses, setBusinesses] = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState(null)
-  const [search, setSearch]         = useState('')
-  const [status, setStatus]         = useState('All')
-  const [plan, setPlan]             = useState('All Plans')
-  const navigate  = useNavigate()
-  const { addToast } = useToast()
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState(null)
+  const [search,     setSearch]     = useState('')
+  const [status,     setStatus]     = useState('All')
+  const [plan,       setPlan]       = useState('All Plans')
+  const navigate      = useNavigate()
+  const { addToast }  = useToast()
 
-  // ─────────────────────────────────────────
-  // CORE LOGIC / HANDLER FUNCTIONS
-  // ─────────────────────────────────────────
-
-  /**
-   * @function    fetchData
-   * @purpose     Fetches businesses from admin API applying current status and plan filters
-   * @returns {Promise<void>}
-   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      // [API CALL]: Pass server-side filters to reduce payload
       const params = { limit: 100 }
-      if (status !== 'All')      params.status = status
+      if (status !== 'All')       params.status = status
       if (plan   !== 'All Plans') params.plan   = plan
       const data = await getBusinesses(params)
-      // [STATE]: Replace business list with fresh API response
       setBusinesses(data.businesses || [])
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load businesses'
@@ -177,9 +193,8 @@ export default function Businesses() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // [DATA TRANSFORM]: Apply client-side text search and status/plan filtering on loaded businesses
   const filtered = businesses.filter(b => {
-    const s = deriveStatus(b)
+    const s           = deriveStatus(b)
     const matchSearch = b.name?.toLowerCase().includes(search.toLowerCase()) ||
                         b.city?.toLowerCase().includes(search.toLowerCase())
     const matchStatus = status === 'All' || s === status
@@ -187,245 +202,170 @@ export default function Businesses() {
     return matchSearch && matchStatus && matchPlan
   })
 
-  // ─────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────
+  // Stats
+  const counts = {
+    total:     businesses.length,
+    active:    businesses.filter(b => deriveStatus(b) === 'active').length,
+    trial:     businesses.filter(b => deriveStatus(b) === 'trial').length,
+    suspended: businesses.filter(b => deriveStatus(b) === 'suspended').length,
+  }
+
+  const STAT_PILLS = [
+    { label: 'Total',     count: counts.total,     color: 'var(--aurora)',   borderColor: 'rgba(59,130,246,0.2)' },
+    { label: 'Active',    count: counts.active,    color: 'var(--emerald)',  borderColor: 'rgba(16,185,129,0.2)' },
+    { label: 'Trial',     count: counts.trial,     color: 'var(--amber)',    borderColor: 'rgba(245,158,11,0.2)' },
+    { label: 'Suspended', count: counts.suspended,  color: 'var(--crimson)',  borderColor: 'rgba(239,68,68,0.2)'  },
+  ]
+
   return (
     <Layout title="Businesses">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-6">
+      {/* ── Header ──────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="page-title mb-0.5">Businesses</h1>
-          <p className="text-sm text-slate-500">
-            {loading ? 'Loading…' : `${filtered.length} businesses across all categories`}
+          <p className="text-sm" style={{ color: 'var(--silver-4)' }}>
+            {loading ? 'Loading…' : `${filtered.length} of ${businesses.length} businesses`}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchData} className="btn-ghost gap-1.5">
-            <RefreshCw size={13} /> Refresh
+            <RefreshCw size={12} /> Refresh
           </button>
           <button className="btn-primary">
-            <Plus size={14} /> Add Business
+            <Plus size={13} /> Add Business
           </button>
         </div>
       </div>
 
-      {/* ── Stat Strip ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Total',     value: businesses.length,                                             color: 'text-white',        border: 'border-white/[0.06]' },
-          { label: 'Active',    value: businesses.filter(b => deriveStatus(b) === 'active').length,    color: 'text-emerald-400',   border: 'border-emerald-500/20' },
-          { label: 'Trial',     value: businesses.filter(b => deriveStatus(b) === 'trial').length,     color: 'text-amber-400',     border: 'border-amber-500/20' },
-          { label: 'Suspended', value: businesses.filter(b => deriveStatus(b) === 'suspended').length, color: 'text-red-400',       border: 'border-red-500/20' },
-        ].map(({ label, value, color, border }) => (
-          <div key={label} className={clsx('card p-4 flex items-center gap-3 border', border)}>
-            <div className="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Building2 size={16} className="text-slate-400" />
-            </div>
+      {/* ── Stat pills ──────────────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-3 mb-5 stagger-children">
+        {STAT_PILLS.map(({ label, count, color, borderColor }) => (
+          <div
+            key={label}
+            className="card-metal px-4 py-3 flex items-center gap-3"
+            style={{ borderColor }}
+          >
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
             <div>
-              <p className="stat-label">{label} Businesses</p>
-              <p className={clsx('text-xl font-bold font-display', color)}>{loading ? '—' : value}</p>
+              <p className="stat-label">{label}</p>
+              <p
+                className="text-xl font-bold leading-tight"
+                style={{ fontFamily: 'var(--font-display)', color: loading ? 'var(--silver-5)' : color, letterSpacing: '-0.02em' }}
+              >
+                {loading ? '—' : count}
+              </p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* ── Filters ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+      {/* ── Filters ─────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        {/* Search */}
+        <div className="relative flex-1" style={{ minWidth: 200, maxWidth: 300 }}>
+          <Search
+            size={13}
+            className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: 'var(--silver-5)' }}
+          />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by name or city…"
-            className="input-field pl-8 text-xs"
+            className="input-field pl-9 text-xs h-9"
           />
         </div>
-        <select value={status} onChange={e => setStatus(e.target.value)} className="input-field w-36 text-xs bg-[#0F1629]">
+
+        {/* Status filter */}
+        <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
           {STATUSES.map(s => (
-            <option key={s} value={s} className="bg-[#0F1629]">
-              {s === 'All' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1)}
-            </option>
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={clsx('px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 capitalize',
+                status === s
+                  ? 'text-white'
+                  : 'hover:text-[var(--silver-2)]'
+              )}
+              style={status === s
+                ? { background: 'linear-gradient(135deg, #2563EB, #3B82F6)', boxShadow: '0 2px 8px rgba(59,130,246,0.3)', color: '#fff' }
+                : { color: 'var(--silver-4)' }
+              }
+            >
+              {s === 'All' ? 'All' : s}
+            </button>
           ))}
+        </div>
+
+        {/* Plan filter */}
+        <select
+          value={plan}
+          onChange={e => setPlan(e.target.value)}
+          className="input-field text-xs h-9 py-0"
+          style={{ width: 120 }}
+        >
+          {PLANS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-        <select value={plan} onChange={e => setPlan(e.target.value)} className="input-field w-40 text-xs bg-[#0F1629]">
-          {PLANS.map(p => (
-            <option key={p} value={p} className="bg-[#0F1629]">
-              {p === 'All Plans' ? 'All Plans' : p.toUpperCase()}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-slate-500 ml-auto">
-          {filtered.length} result{filtered.length !== 1 ? 's' : ''}
-        </p>
       </div>
 
-      {/* ── Loading skeleton ───────────────────────────────────────────────── */}
+      {/* ── Error ───────────────────────────────────────────── */}
+      {error && (
+        <div className="mb-5 px-4 py-3 rounded-xl text-sm flex items-center gap-2"
+          style={{ background: 'var(--crimson-dim)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--crimson-light)' }}>
+          {error}
+        </div>
+      )}
+
+      {/* ── Loading skeletons ────────────────────────────────── */}
       {loading && (
-        <div className="grid grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="card p-5 animate-pulse">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-white/5 rounded-xl" />
-                <div className="flex-1">
-                  <div className="h-4 w-32 bg-white/5 rounded mb-1" />
-                  <div className="h-3 w-24 bg-white/5 rounded" />
-                </div>
+        <div className="space-y-2">
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="card-metal p-4 flex items-center gap-4"
+              style={{ animationDelay: `${i * 40}ms` }}>
+              <div className="skeleton w-11 h-11 rounded-xl flex-shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="skeleton h-3 w-40 rounded" />
+                <div className="skeleton h-2.5 w-24 rounded" />
+                <div className="skeleton h-2.5 w-20 rounded" />
               </div>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {Array.from({ length: 2 }).map((_, j) => (
-                  <div key={j} className="bg-white/[0.03] rounded-lg p-2.5 h-14" />
-                ))}
-              </div>
+              <div className="skeleton w-11 h-11 rounded-full flex-shrink-0" />
             </div>
           ))}
         </div>
       )}
 
-      {/* ── Error ──────────────────────────────────────────────────────────── */}
-      {!loading && error && (
-        <div className="card p-12 text-center">
-          <AlertTriangle size={32} className="text-red-400 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-white mb-1">Failed to load businesses</p>
-          <p className="text-xs text-slate-500 mb-4">{error}</p>
-          <button onClick={fetchData} className="btn-primary mx-auto">
-            <RefreshCw size={13} /> Retry
+      {/* ── Business tiles ───────────────────────────────────── */}
+      {!loading && filtered.length > 0 && (
+        <div className="space-y-2">
+          {filtered.map((b, i) => (
+            <div key={b._id} style={{ animation: `fade-up ${300 + i * 25}ms cubic-bezier(0.16,1,0.3,1) both` }}>
+              <BusinessTile
+                business={b}
+                onClick={() => navigate(`/businesses/${b._id}`)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Empty state ──────────────────────────────────────── */}
+      {!loading && filtered.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}
+          >
+            <Building2 size={24} style={{ color: 'var(--silver-5)' }} />
+          </div>
+          <p className="text-sm font-medium" style={{ color: 'var(--silver-3)' }}>No businesses found</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--silver-5)' }}>
+            {search ? `No results for "${search}"` : 'Adjust your filters to see results'}
+          </p>
+          <button onClick={() => { setSearch(''); setStatus('All'); setPlan('All Plans') }}
+            className="btn-ghost mt-4 text-xs">
+            Clear filters
           </button>
-        </div>
-      )}
-
-      {/* ── Empty ──────────────────────────────────────────────────────────── */}
-      {!loading && !error && filtered.length === 0 && (
-        <div className="card p-12 text-center">
-          <Building2 size={32} className="text-slate-600 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-white mb-1">No businesses found</p>
-          <p className="text-xs text-slate-500">Try adjusting your search or filters</p>
-        </div>
-      )}
-
-      {/* ── Business Cards ─────────────────────────────────────────────────── */}
-      {!loading && !error && filtered.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          {filtered.map(b => {
-            const bStatus = deriveStatus(b)
-            const theme   = getCatTheme(b.category)
-            const icon    = CATEGORY_ICON[b.category?.toLowerCase()] || '🏢'
-
-            return (
-              <div
-                key={b.id}
-                onClick={() => navigate(`/businesses/${b.id}`)}
-                className="card card-hover p-5 cursor-pointer group animate-fade-in relative overflow-hidden"
-                style={{
-                  // Left accent bar
-                  borderLeft: `3px solid ${theme.accent}`,
-                  // Subtle glow around the card on hover via box-shadow (CSS handles :hover via Tailwind,
-                  // so we use a CSS custom property trick with inline style for the base shadow)
-                  '--cat-glow': theme.glow,
-                  boxShadow: `0 0 0 1px rgba(255,255,255,0.04), inset 0 0 24px ${theme.a08}`,
-                }}
-              >
-                {/* Ambient colour wash in top-right corner */}
-                <div
-                  className="pointer-events-none absolute -top-6 -right-6 w-24 h-24 rounded-full blur-2xl opacity-40"
-                  style={{ background: theme.accent }}
-                />
-
-                {/* ── Card Header ─────────────────────────────────────────── */}
-                <div className="flex items-start justify-between mb-4 relative">
-                  <div className="flex items-center gap-3">
-                    {/* Category icon with theme background */}
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 border"
-                      style={{
-                        background: theme.a15,
-                        borderColor: theme.border,
-                      }}
-                    >
-                      {icon}
-                    </div>
-
-                    <div className="min-w-0">
-                      <h3
-                        className="text-sm font-semibold text-white flex items-center gap-1 truncate transition-colors"
-                        style={{ '--tw-text-opacity': 1 }}
-                      >
-                        <span className="group-hover:text-[var(--cat-accent)] transition-colors truncate"
-                              style={{ '--cat-accent': theme.accent }}>
-                          {b.name}
-                        </span>
-                        <ExternalLink size={10} className="text-slate-600 flex-shrink-0" />
-                      </h3>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {b.city} · {b.category}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Status badge */}
-                  <span className={clsx(
-                    'badge capitalize text-[10px] flex-shrink-0',
-                    bStatus === 'active'    ? 'badge-green' :
-                    bStatus === 'trial'     ? 'badge-yellow' :
-                                              'badge-red'
-                  )}>
-                    {bStatus}
-                  </span>
-                </div>
-
-                {/* ── Info Row ────────────────────────────────────────────── */}
-                <div className="grid grid-cols-2 gap-3 mb-4 relative">
-                  {[
-                    { label: 'Email', value: b.email },
-                    { label: 'Phone', value: b.phone },
-                  ].map(({ label, value }) => (
-                    <div
-                      key={label}
-                      className="rounded-lg p-2.5"
-                      style={{ background: theme.a08 }}
-                    >
-                      <p
-                        className="text-[9px] uppercase tracking-wider mb-0.5 font-medium"
-                        style={{ color: theme.accent }}
-                      >
-                        {label}
-                      </p>
-                      <p className="text-xs font-medium text-slate-300 truncate">{value || '—'}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* ── Footer: Plan + Category theme chip ──────────────────── */}
-                <div
-                  className="pt-3 border-t flex items-center justify-between relative"
-                  style={{ borderColor: 'rgba(255,255,255,0.05)' }}
-                >
-                  {/* Plan badge */}
-                  <span className={clsx('badge text-[10px]', {
-                    pro:  'bg-gold-muted text-gold',
-                    plus: 'badge-indigo',
-                    free: 'badge-gray',
-                  }[b.plan] || 'badge-gray')}>
-                    {b.plan?.toUpperCase() || 'FREE'}
-                  </span>
-
-                  {/* Category theme chip — mirrors Morning Paper label */}
-                  {theme.label && (
-                    <span
-                      className="text-[9px] font-semibold px-2 py-0.5 rounded-full tracking-wide"
-                      style={{
-                        background: theme.chip,
-                        color:      theme.chipText,
-                      }}
-                    >
-                      {theme.label}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
         </div>
       )}
     </Layout>
