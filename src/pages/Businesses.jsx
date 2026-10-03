@@ -21,14 +21,14 @@ function computeHealthScore(b) {
   if (b.plan === 'plus') score +=  8
   if (!b.isActive && !b.isTrialActive) score -= 30
   // Add some per-business variance so tiles aren't identical
-  score += ((b._id?.charCodeAt(5) ?? 0) % 15) - 7
+  score += ((b.id?.charCodeAt(5) ?? 0) % 15) - 7
   return Math.min(100, Math.max(5, score))
 }
 
 // ── Derived monthly revenue estimate ──────────────────────────
 function estimateMrr(b) {
   const base = b.plan === 'pro' ? 9800 : b.plan === 'plus' ? 4200 : b.isTrialActive ? 0 : 1200
-  const variance = ((b._id?.charCodeAt(3) ?? 0) % 30) * 100
+  const variance = ((b.id?.charCodeAt(3) ?? 0) % 30) * 100
   return base + variance
 }
 
@@ -339,10 +339,11 @@ export default function Businesses() {
       {!loading && filtered.length > 0 && (
         <div className="space-y-2">
           {filtered.map((b, i) => (
-            <div key={b._id} style={{ animation: `fade-up ${300 + i * 25}ms cubic-bezier(0.16,1,0.3,1) both` }}>
+            <div key={b.id} style={{ animation: `fade-up ${300 + i * 25}ms cubic-bezier(0.16,1,0.3,1) both` }}>
               <BusinessTile
                 business={b}
-                onClick={() => navigate(`/businesses/${b._id}`)}
+                // GET /admin/businesses returns the Firestore document id as `id` (there is no `_id`)
+                onClick={() => { if (b.id) navigate(`/businesses/${b.id}`) }}
               />
             </div>
           ))}

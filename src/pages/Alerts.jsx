@@ -55,7 +55,7 @@ import clsx from 'clsx'
 // ─────────────────────────────────────────
 const SEVERITIES = ['All', 'Critical', 'High', 'Medium', 'Low']
 const STATUSES   = ['All', 'OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED']
-const TYPES      = ['All', 'LOW_CONFIRMATION_RATE', 'PAYMENT_OVERDUE', 'SUSPICIOUS_ACTIVITY', 'TRIAL_EXPIRING']
+const TYPES      = ['All', 'LOW_CONFIRMATION_RATE', 'PAYMENT_OVERDUE', 'SUSPICIOUS_ACTIVITY', 'TRIAL_EXPIRING', 'TRIAL_NUMBER_EXPIRED']
 
 /**
  * @function    SeverityBadge
@@ -89,6 +89,7 @@ function TypeLabel({ type }) {
   const map = {
     LOW_CONFIRMATION_RATE: { label: 'Low Confirmation Rate', color: 'badge-yellow' },
     PAYMENT_OVERDUE:       { label: 'Payment Overdue',        color: 'badge-red' },
+    TRIAL_NUMBER_EXPIRED:  { label: 'Trial Number Ended (deactivate in Phone Numbers)', color: 'badge-yellow' },
     SUSPICIOUS_ACTIVITY:   { label: 'Suspicious Activity',    color: 'bg-purple-500/15 text-purple-400' },
     TRIAL_EXPIRING:        { label: 'Trial Expiring',          color: 'badge-indigo' },
   }

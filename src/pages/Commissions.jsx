@@ -42,7 +42,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Layout from '../components/layout/Layout'
 import { useToast } from '../context/ToastContext'
-import { getRevenue, getPendingCommissions, approveCommission, approveBulkCommissions } from '../api/admin'
+import { getRevenue, getPendingCommissions, approveCommission, approveBulkCommissions, getCommissionDisputes, resolveCommissionDispute } from '../api/admin'
+import Modal from '../components/ui/Modal'
 import { Download, RefreshCw, AlertCircle, TrendingUp, DollarSign, Zap, Users, CheckCircle, Clock } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -97,6 +98,12 @@ export default function Commissions() {
   const [selected, setSelected] = useState(new Set())
   const [approving, setApproving] = useState(false)
 
+  // [STATE]: Open commission disputes and the one being resolved
+  const [disputes, setDisputes] = useState([])
+  const [resolving, setResolving] = useState(null) // { commission, decision }
+  const [resolutionNote, setResolutionNote] = useState('')
+  const [resolveBusy, setResolveBusy] = useState(false)
+
   // ─────────────────────────────────────────
   // CORE LOGIC / HANDLER FUNCTIONS
   // ─────────────────────────────────────────
@@ -111,10 +118,11 @@ export default function Commissions() {
     setError(null)
     try {
       // [API CALL]: Parallel fetch of revenue totals and pending approval queue
-      const [rev, pen] = await Promise.all([getRevenue(), getPendingCommissions()])
+      const [rev, pen, disp] = await Promise.all([getRevenue(), getPendingCommissions(), getCommissionDisputes()])
       // [STATE]: Store full revenue object and extract commissions array
       setRevenue(rev)
       setPending(pen.commissions || [])
+      setDisputes(disp.disputes || [])
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to load commission data'
       setError(msg)
@@ -179,6 +187,27 @@ export default function Commissions() {
     }
   }
 
+  /**
+   * @function    submitResolution
+   * @purpose     Resolves a commission dispute (ACCEPT voids the charge; REJECT keeps it payable) — audited server-side
+   */
+  const submitResolution = async () => {
+    setResolveBusy(true)
+    try {
+      const out = await resolveCommissionDispute(resolving.commission.id, resolving.decision, resolutionNote.trim())
+      const effect = out.invoiceEffect?.type === 'INVOICE_REDUCED' ? ' — invoice reduced'
+        : out.invoiceEffect?.type === 'CREDIT_ISSUED' ? ' — credit issued on the next invoice' : ''
+      addToast(`Dispute ${resolving.decision === 'ACCEPT' ? 'accepted' : 'rejected'}${effect}`, 'success')
+      setResolving(null)
+      setResolutionNote('')
+      await fetchData()
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Could not resolve the dispute', 'error')
+    } finally {
+      setResolveBusy(false)
+    }
+  }
+
   // ─────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────
@@ -237,12 +266,74 @@ export default function Commissions() {
       </div>
 
       {/* ── Pending Approvals ── */}
+      {/* Open disputes (Phase 2) — businesses may dispute a commission within 7 days */}
+      {disputes.length > 0 && (
+        <div className="card p-5 mb-6 border border-red-500/20">
+          <h3 className="section-title mb-4">Open Disputes ({disputes.length})</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/5 text-slate-500 text-left">
+                  <th className="pb-2 pr-4">Business</th>
+                  <th className="pb-2 pr-4">Charge</th>
+                  <th className="pb-2 pr-4">Reason</th>
+                  <th className="pb-2 pr-4">Raised</th>
+                  <th className="pb-2 text-right">Resolve</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {disputes.map((c) => (
+                  <tr key={c.id} className="align-top">
+                    <td className="py-3 pr-4 text-white font-medium">{c.businessName}</td>
+                    <td className="py-3 pr-4 text-slate-300">
+                      {c.type} · <span className="text-amber-400 font-semibold">₹{((Number.isInteger(c.amountPaise) ? c.amountPaise : Math.round((c.amount || 0) * 100)) / 100).toLocaleString('en-IN')}</span>
+                      {c.model === 'PERCENT_OF_SERVICE_PRICE_SNAPSHOT' && (
+                        <p className="text-slate-500 mt-0.5">{c.serviceName || 'Service'} · {c.ratePercent}% of ₹{(c.baseAmountPaise / 100).toLocaleString('en-IN')}</p>
+                      )}
+                      {c.invoiceId && <p className="text-slate-500 mt-0.5">On invoice {c.invoiceId}</p>}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-300 max-w-[280px]">{c.dispute?.reason}</td>
+                    <td className="py-3 pr-4 text-slate-400">{c.dispute?.raisedAt ? new Date(c.dispute.raisedAt).toLocaleString('en-IN') : '—'}</td>
+                    <td className="py-3 text-right whitespace-nowrap">
+                      <button onClick={() => setResolving({ commission: c, decision: 'ACCEPT' })} className="text-[11px] px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 font-medium mr-1.5">Accept (void)</button>
+                      <button onClick={() => setResolving({ commission: c, decision: 'REJECT' })} className="text-[11px] px-3 py-1 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 font-medium">Reject</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <Modal isOpen={!!resolving} onClose={() => setResolving(null)} title={resolving?.decision === 'ACCEPT' ? 'Accept dispute — void the charge' : 'Reject dispute — charge stands'}>
+        {resolving && (
+          <div className="space-y-4 text-sm">
+            <p className="text-xs text-slate-400">
+              {resolving.decision === 'ACCEPT'
+                ? 'The commission is voided (kept for audit). If it is on an unpaid invoice that invoice is reduced; if the invoice was already paid, a credit is applied to the next invoice.'
+                : 'The commission becomes payable again and is billed on its invoice (or the next one).'}
+            </p>
+            <label className="block">
+              <span className="text-xs text-slate-400">Resolution note (required, kept on the audit trail)</span>
+              <textarea className="input-field w-full mt-1" rows={3} maxLength={1000} value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)} />
+            </label>
+            <div className="flex gap-2 justify-end">
+              <button className="btn-ghost text-xs px-3 py-1.5" onClick={() => setResolving(null)}>Close</button>
+              <button className="btn-primary text-xs px-3 py-1.5" disabled={resolveBusy || resolutionNote.trim().length < 3} onClick={submitResolution}>
+                {resolveBusy ? 'Saving…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {pending.length > 0 && (
         <div className="card p-5 mb-6 border border-amber-500/20">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Clock size={15} className="text-amber-400" />
-              <h3 className="section-title mb-0">Pending Approvals ({pending.length})</h3>
+              <h3 className="section-title mb-0">Pending Approvals — legacy flat commissions ({pending.length})</h3>
             </div>
             <div className="flex items-center gap-2">
               {selected.size > 0 && (

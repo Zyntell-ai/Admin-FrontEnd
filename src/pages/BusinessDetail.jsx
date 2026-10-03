@@ -47,7 +47,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { getBusinessProfile, updateBusiness, suspendBusiness, getFeatureOverrides, saveFeatureOverrides, changePlan, getPlanHistory, getExotelHealth } from '../api/admin'
+import { isValidBusinessId, getBusinessProfile, updateBusiness, suspendBusiness, getFeatureOverrides, saveFeatureOverrides, changePlan, getPlanHistory, getExotelHealth } from '../api/admin'
 import {
   ArrowLeft, MapPin, Tag, Star, Ban, AlertOctagon,
   Unlock, TrendingUp, MessageSquare, Edit2, Check,
@@ -89,6 +89,97 @@ function deriveStatus(b) {
   if (b.isTrialActive) return 'trial'
   if (b.isActive) return 'active'
   return 'suspended'
+}
+
+/**
+ * @function    LocationCard
+ * @purpose     Admin view/edit of the canonical business location (Phase 5) via the restricted admin
+ *              business endpoint. Manual coordinates are available here for admin/debugging.
+ */
+function LocationCard({ businessId, location, readiness, onSaved }) {
+  const { addToast } = useToast()
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
+
+  const startEdit = () => {
+    setForm({
+      addressLine1: location?.addressLine1 || '', addressLine2: location?.addressLine2 || '',
+      locality: location?.locality || '', city: location?.city || '', state: location?.state || '',
+      pincode: location?.pincode || '',
+      latitude: location?.latitude ?? '', longitude: location?.longitude ?? '',
+    })
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const num = (v) => (v === '' || v === null ? null : Number(v))
+      await updateBusiness(businessId, {
+        location: {
+          addressLine1: form.addressLine1.trim() || null, addressLine2: form.addressLine2.trim() || null,
+          locality: form.locality.trim() || null, city: form.city.trim(), state: form.state.trim() || null,
+          pincode: form.pincode.trim() || null, latitude: num(form.latitude), longitude: num(form.longitude),
+        },
+      })
+      addToast('Location updated', 'success')
+      setEditing(false)
+      onSaved()
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Could not update the location', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const field = (key, label, extra = {}) => (
+    <label key={key} className="block">
+      <span className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</span>
+      <input className="input-field w-full mt-1 text-xs" value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} {...extra} />
+    </label>
+  )
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="section-title mb-0">Location</h4>
+        {!editing && <button className="btn-ghost text-xs px-3 py-1" onClick={startEdit}>Edit</button>}
+      </div>
+      {!editing ? (
+        <div className="space-y-1 text-xs">
+          {[location?.addressLine1, location?.addressLine2, location?.locality, location?.city, location?.state, location?.pincode]
+            .filter(Boolean).map((line, i) => <p key={i} className="text-white">{line}</p>)}
+          <p className="text-slate-500 pt-1">
+            Pin: {location?.latitude != null ? `${Number(location.latitude).toFixed(5)}, ${Number(location.longitude).toFixed(5)}` : 'not set'}
+          </p>
+          <p className={readiness?.complete ? 'text-emerald-400' : 'text-amber-400'}>
+            {readiness?.complete ? '✓ Location complete' : '⚠ Map pin missing — required before go-live'}
+          </p>
+          {location?.legacy && <p className="text-slate-500">(from legacy settings — not yet migrated)</p>}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {field('addressLine1', 'Address line 1', { maxLength: 200 })}
+          {field('addressLine2', 'Address line 2', { maxLength: 200 })}
+          <div className="grid grid-cols-2 gap-2">
+            {field('locality', 'Locality', { maxLength: 100 })}
+            {field('city', 'City *', { maxLength: 100 })}
+            {field('state', 'State', { maxLength: 100 })}
+            {field('pincode', 'PIN code', { maxLength: 6 })}
+            {field('latitude', 'Latitude (−90…90)', { type: 'number', step: 'any' })}
+            {field('longitude', 'Longitude (−180…180)', { type: 'number', step: 'any' })}
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <button className="btn-ghost text-xs px-3 py-1.5" onClick={() => setEditing(false)}>Cancel</button>
+            <button className="btn-primary text-xs px-3 py-1.5" disabled={saving || form.city.trim().length < 2} onClick={save}>
+              {saving ? 'Saving…' : 'Save location'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function BusinessDetail() {
@@ -141,6 +232,13 @@ export default function BusinessDetail() {
    * @returns {Promise<void>}
    */
   const fetchData = useCallback(async () => {
+    // [GUARD]: No request without a valid business id (e.g. a /businesses/undefined link)
+    if (!isValidBusinessId(id)) {
+      setData(null)
+      setError('Invalid business link — open the business from the Businesses list.')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -168,7 +266,7 @@ export default function BusinessDetail() {
   // [BUSINESS RULE]: Load feature data once when Feature Control tab is activated.
   // featureError flag prevents infinite retries if the backend returns 404 (not deployed yet).
   useEffect(() => {
-    if (activeTab !== 'Feature Control') return
+    if (activeTab !== 'Feature Control' || !isValidBusinessId(id)) return
     if (featureData || featureLoading || featureError) return
     setFeatureLoading(true)
     getFeatureOverrides(id)
@@ -182,7 +280,7 @@ export default function BusinessDetail() {
 
   // [BUSINESS RULE]: Load plan history once when Plan History tab is activated.
   useEffect(() => {
-    if (activeTab !== 'Plan History') return
+    if (activeTab !== 'Plan History' || !isValidBusinessId(id)) return
     if (planHistory || planHistoryLoading || planHistoryError) return
     setPlanHistoryLoading(true)
     getPlanHistory(id)
@@ -441,8 +539,9 @@ export default function BusinessDetail() {
                 { label: 'Plan', value: biz.plan?.toUpperCase() },
                 { label: 'Status', value: bStatus },
                 { label: 'Trial Active', value: biz.isTrialActive ? 'Yes' : 'No' },
-                { label: 'Missed Call Recovery', value: ['starter', 'growth', 'pro'].includes(biz.plan) ? '✓ On plan' : '✗ Not on plan' },
-                { label: 'AI Voice Receptionist', value: ['growth', 'pro'].includes(biz.plan) ? '✓ On plan' : '✗ Not on plan' },
+                // [BUSINESS RULE]: Entitlements as the backend enforces them (plan + overrides) — never a local plan table
+                { label: 'Missed Call Recovery', value: data.effectiveFeatures ? (data.effectiveFeatures.missedCallToWhatsApp ? '✓ Enabled' : '✗ Not enabled') : '—' },
+                { label: 'AI Voice Receptionist', value: data.effectiveFeatures ? (data.effectiveFeatures.aiVoiceAgent ? '✓ Enabled' : '✗ Not enabled') : '—' },
                 { label: 'Exotel API', value: exotelHealth === null ? 'Checking…' : exotelHealth?.ok ? '✓ Healthy' : '✗ Unreachable' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0">
@@ -451,6 +550,8 @@ export default function BusinessDetail() {
                 </div>
               ))}
             </div>
+
+            <LocationCard businessId={id} location={data.location} readiness={data.locationReadiness} onSaved={fetchData} />
           </div>
 
           {/* Right: Revenue Chart */}

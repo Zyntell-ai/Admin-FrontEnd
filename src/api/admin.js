@@ -61,7 +61,12 @@ export async function getBusinesses(params = {}) {
  * @param  {string} id - Business document ID
  * @returns {Promise<AxiosResponse>} API response
  */
+/** True for a usable business id (rejects undefined/null/'' and the strings 'undefined'/'null') */
+export const isValidBusinessId = (id) => typeof id === 'string' && id.trim() !== '' && id !== 'undefined' && id !== 'null'
+
 export async function getBusinessProfile(id) {
+  // [GUARD]: Never call /admin/businesses/undefined
+  if (!isValidBusinessId(id)) throw new Error('Invalid business id')
   // [API CALL]: Load full business detail view including financial and alert history
   const res = await apiClient.get(`/admin/businesses/${id}`)
   return res.data // { business, settings, revenueSummary, commissionLedger, activeAlerts, invoiceHistory }
@@ -69,7 +74,8 @@ export async function getBusinessProfile(id) {
 
 /**
  * @function    updateBusiness
- * @purpose     Updates mutable fields on an existing business record
+ * @purpose     Restricted profile/location edit — accepts ONLY name, phone, city, locality and location {…}.
+ *              Plan, subscription, features, founding and suspension have their own endpoints (the API rejects them here).
  * @param  {string} id - Business document ID
  * @param  {Object} updates - Partial business fields to update
  * @returns {Promise<AxiosResponse>} API response
@@ -342,6 +348,66 @@ export async function changePlan(id, plan, reason) {
  */
 export async function getPlanHistory(id) {
   const res = await apiClient.get(`/admin/businesses/${id}/plan-history`)
+  return res.data
+}
+
+// ── Phone Numbers (manual Exotel provisioning — Phase 4) ─────────────────────
+// Flow: PENDING → IN_PROGRESS → (allocate) ALLOCATED → (activate after a test) ACTIVE.
+// An allocated number is stored but NOT live; only activation makes it visible to the business and routed.
+
+/** Number requests, optionally filtered by status → { requests: [{ ..., business: { name, plan }, number }] } */
+export async function getNumberRequests(params = {}) {
+  const res = await apiClient.get('/admin/number-requests', { params })
+  return res.data
+}
+
+/** Counts for the sidebar badge → { counts: { PENDING, IN_PROGRESS, ALLOCATED }, needsAttention } */
+export async function getNumberRequestSummary() {
+  const res = await apiClient.get('/admin/number-requests/summary')
+  return res.data
+}
+
+/** Move a request: IN_PROGRESS | PENDING | REJECTED (note required) | CANCELLED */
+export async function updateNumberRequestStatus(id, status, note) {
+  const res = await apiClient.put(`/admin/number-requests/${id}`, { status, note: note || undefined })
+  return res.data
+}
+
+/** Every number record of a business (allocated, active, released) */
+export async function getBusinessNumbers(businessId) {
+  const res = await apiClient.get(`/admin/businesses/${businessId}/numbers`)
+  return res.data
+}
+
+/** Store an Exotel number the admin has ALREADY bought — it is allocated, not live */
+export async function allocateNumber(businessId, { phoneNumber, type = 'voice', requestId, note }) {
+  const res = await apiClient.post(`/admin/businesses/${businessId}/numbers`, { phoneNumber, type, requestId, note: note || undefined })
+  return res.data
+}
+
+/** Make an allocated number live — requires confirming a successful test */
+export async function activateNumber(businessId, numberId, note) {
+  const res = await apiClient.post(`/admin/businesses/${businessId}/numbers/${numberId}/activate`, { testConfirmed: true, note: note || undefined })
+  return res.data
+}
+
+/** Release an allocated or active number (nothing is released in Exotel — that stays manual) */
+export async function releaseNumber(businessId, numberId, note) {
+  const res = await apiClient.delete(`/admin/businesses/${businessId}/numbers/${numberId}`, { data: { note: note || undefined } })
+  return res.data
+}
+
+// ── Commission disputes (Phase 2) ───────────────────────────────────────────
+
+/** Open disputes → { disputes, total } */
+export async function getCommissionDisputes() {
+  const res = await apiClient.get('/admin/commissions/disputes')
+  return res.data
+}
+
+/** Resolve a dispute: decision 'ACCEPT' (void the charge) | 'REJECT' (charge stands); note required */
+export async function resolveCommissionDispute(id, decision, note) {
+  const res = await apiClient.post(`/admin/commissions/${id}/resolve-dispute`, { decision, note })
   return res.data
 }
 

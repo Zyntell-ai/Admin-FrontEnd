@@ -35,6 +35,7 @@ import Commissions from './pages/Commissions'
 import Businesses from './pages/Businesses'
 import BusinessDetail from './pages/BusinessDetail'
 import Categories from './pages/Categories'
+import PhoneNumbers from './pages/PhoneNumbers'
 import Alerts from './pages/Alerts'
 import Settings from './pages/Settings'
 import Profile from './pages/Profile'
@@ -119,6 +120,7 @@ export default function App() {
         <Route path="/businesses" element={<ProtectedRoute><Businesses /></ProtectedRoute>} />
         <Route path="/businesses/:id" element={<ProtectedRoute><BusinessDetail /></ProtectedRoute>} />
         <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
+        <Route path="/phone-numbers" element={<ProtectedRoute><PhoneNumbers /></ProtectedRoute>} />
         <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

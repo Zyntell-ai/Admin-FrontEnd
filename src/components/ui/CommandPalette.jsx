@@ -30,7 +30,7 @@ import { businesses, businessStats } from '../../data/mockData'
 import {
   Search, LayoutDashboard, CalendarCheck, BarChart3,
   CreditCard, DollarSign, Building2, Tag, Bell,
-  Settings, Zap, ArrowRight, X, Clock
+  Settings, Zap, ArrowRight, X, Clock, Phone
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -45,6 +45,7 @@ const PAGES = [
   { label: 'Analytics', path: '/analytics', icon: BarChart3, group: 'Pages' },
   { label: 'Billing', path: '/billing', icon: CreditCard, group: 'Pages' },
   { label: 'Commissions', path: '/commissions', icon: DollarSign, group: 'Pages' },
+  { label: 'Phone Numbers', path: '/phone-numbers', icon: Phone, group: 'Pages' },
   { label: 'Businesses', path: '/businesses', icon: Building2, group: 'Pages' },
   { label: 'Categories', path: '/categories', icon: Tag, group: 'Pages' },
   { label: 'Alerts', path: '/alerts', icon: Bell, group: 'Pages' },

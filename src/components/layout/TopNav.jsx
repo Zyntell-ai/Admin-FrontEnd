@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Bell, X, Search } from 'lucide-react'
 import { notifications } from '../../data/mockData'
+// TEMPORARY DEMO DATA — remove before production (see data/demoData.js)
+import { DEMO_NOTIFICATION_BUSINESS_NAMES } from '../../data/demoData'
 import { useAuth } from '../../context/AuthContext'
 import clsx from 'clsx'
 
@@ -25,7 +27,7 @@ export default function TopNav({ title }) {
       setNotifs(prev => [{
         id:      Date.now(),
         type:    'booking',
-        message: `New booking — ${['Sunrise Dental', 'Apollo Clinic', 'CareFirst'][Math.floor(Math.random() * 3)]}`,
+        message: `New booking — ${DEMO_NOTIFICATION_BUSINESS_NAMES[Math.floor(Math.random() * DEMO_NOTIFICATION_BUSINESS_NAMES.length)]}`,
         time:    'Just now',
         read:    false,
       }, ...prev.slice(0, 9)])

@@ -3,7 +3,8 @@
  * @module      Mock Data
  * @project     Admin-FrontEnd
  * @layer       Data
- * @description Static Firestore-aligned mock dataset providing businesses, bookings, stats, metrics, alerts, invoices, commissions, categories, admin users, trials, and chart data for the admin dashboard UI.
+ * @description ⚠️ TEMPORARY DEMO DATA — remove before production (see data/demoData.js).
+ *              Static Firestore-aligned mock dataset providing businesses, bookings, stats, metrics, alerts, invoices, commissions, categories, admin users, trials, and chart data for the admin dashboard UI.
  *
  * @updated     2026-05-29
  * @version     1.0.0

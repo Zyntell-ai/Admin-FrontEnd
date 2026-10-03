@@ -13,25 +13,8 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import clsx from 'clsx'
-
-// ── Live activity stream data ──────────────────────────────────
-const STREAM_SEED = [
-  { id: 1, type: 'payment',  msg: 'Sunrise Dental paid invoice #INV-0041',       time: '2m ago',  color: 'var(--emerald)' },
-  { id: 2, type: 'signup',   msg: 'Apollo Multispeciality joined on Growth plan', time: '7m ago',  color: 'var(--aurora)'  },
-  { id: 3, type: 'booking',  msg: '18 bookings confirmed via AI at MedFirst',     time: '12m ago', color: 'var(--violet-light)' },
-  { id: 4, type: 'upgrade',  msg: 'CareFirst Clinic upgraded Trial → Pro',        time: '24m ago', color: 'var(--amber)'   },
-  { id: 5, type: 'alert',    msg: 'Overdue invoice detected — Wellness Hub',      time: '31m ago', color: 'var(--crimson)' },
-  { id: 6, type: 'payment',  msg: 'HealthNest paid ₹8,400 monthly subscription',  time: '44m ago', color: 'var(--emerald)' },
-]
-
-// ── AI intelligence observations ──────────────────────────────
-const INTEL = [
-  { color: 'var(--aurora)',   text: 'Trial conversions increased 8% — onboarding optimisation is working.' },
-  { color: 'var(--emerald)',  text: 'Hyderabad clinics outperform average platform revenue by 17%.' },
-  { color: 'var(--violet-light)', text: 'Appointment reminders reduced no-shows by 22% across healthcare clients.' },
-  { color: 'var(--amber)',    text: '3 businesses on trial are entering day 12 — conversion window is active.' },
-  { color: 'var(--crimson)',  text: 'Wellness Hub has 2 overdue invoices totalling ₹14,200 — follow up recommended.' },
-]
+// TEMPORARY DEMO DATA — isolated in data/demoData.js; remove before production (see that file)
+import { STREAM_SEED, INTEL, DEMO_STREAM_BUSINESS_NAMES, DEMO_CHART_INSIGHTS } from '../data/demoData'
 
 // ── Custom area chart tooltip ──────────────────────────────────
 function ChartTip({ active, payload, label }) {
@@ -175,7 +158,7 @@ export default function Dashboard() {
   // Inject stream events periodically
   useEffect(() => {
     const types   = ['payment', 'booking', 'signup', 'upgrade']
-    const names   = ['CareFirst', 'Sunrise Dental', 'HealthNest', 'Apollo Clinic', 'MedFirst']
+    const names   = DEMO_STREAM_BUSINESS_NAMES
     const colors  = ['var(--emerald)', 'var(--aurora)', 'var(--violet-light)', 'var(--amber)']
     let idx = 0
     const t = setInterval(() => {
@@ -259,7 +242,7 @@ export default function Dashboard() {
           trend="12.4%"
           trendDir="up"
           confidence={87}
-          insight="Growth primarily driven by clinic upgrades this quarter."
+          insight={DEMO_CHART_INSIGHTS.revenue}
           icon={DollarSign}
           color="var(--aurora)"
           delay={0}
@@ -270,7 +253,7 @@ export default function Dashboard() {
           trend="3 new"
           trendDir="up"
           confidence={94}
-          insight="2 businesses approaching plan renewal in 7 days."
+          insight={DEMO_CHART_INSIGHTS.renewals}
           icon={Building2}
           color="var(--emerald)"
           delay={60}
@@ -292,7 +275,7 @@ export default function Dashboard() {
           trend="+4.2%"
           trendDir="up"
           confidence={91}
-          insight="AI receptionist driving higher booking completion rates."
+          insight={DEMO_CHART_INSIGHTS.bookings}
           icon={Activity}
           color="var(--amber)"
           delay={180}

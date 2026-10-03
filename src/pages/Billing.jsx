@@ -275,7 +275,7 @@ export default function Billing() {
                       <p className="text-white font-medium text-xs">{inv.businessName}</p>
                       <p className="text-[10px] text-slate-500">{inv.category}</p>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 text-xs">{inv.month}</td>
+                    <td className="px-4 py-3 text-slate-300 text-xs">{inv.type === 'PLAN_PURCHASE_RECEIPT' ? `Plan purchase · ${inv.planName || inv.plan}` : inv.month}</td>
                     <td className="px-4 py-3"><span className="badge badge-indigo">{inv.plan?.toUpperCase()}</span></td>
                     <td className="px-4 py-3 text-slate-300 text-xs">₹{(inv.baseFee || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-slate-300 text-xs">₹{((inv.bookingCommissions || 0) + (inv.showupCommissions || 0) + (inv.leadCommissions || 0)).toLocaleString()}</td>

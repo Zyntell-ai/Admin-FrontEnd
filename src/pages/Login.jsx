@@ -192,7 +192,7 @@ export default function Login() {
               AI Operations Platform
             </p>
             <p className="mt-1.5 text-[11px]" style={{ color: 'var(--silver-5)' }}>
-              Unified control for modern healthcare automation
+              Unified control for local-business automation
             </p>
           </div>
 

@@ -59,6 +59,56 @@ import clsx from 'clsx'
 // ─────────────────────────────────────────
 // STATE & HOOKS
 // ─────────────────────────────────────────
+/**
+ * @function    TerminologyEditor
+ * @purpose     Edits the category's customer-facing vocabulary override (categories/{id}.terminology).
+ *              Only the words that differ from the built-in defaults need to be set. The backend validates
+ *              languages (en/te/hi), keys and plain text, and the change applies to messages within ~5 minutes.
+ */
+const TERMINOLOGY_KEYS = 'customer, customers, booking, bookings, staffMember, place, placeTo, visit, service, checkIn, cancellation, completedVisit'
+function TerminologyEditor({ category, onSaved }) {
+  const { addToast } = useToast()
+  const [text, setText] = useState(category.terminology ? JSON.stringify(category.terminology, null, 2) : '')
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    let value = null
+    if (text.trim()) {
+      try { value = JSON.parse(text) } catch { addToast('Terminology must be valid JSON', 'error'); return }
+    }
+    setSaving(true)
+    try {
+      await updateCategory(category.id, { terminology: value })
+      addToast('Terminology saved', 'success')
+      onSaved?.()
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Could not save terminology', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/[0.05]">
+      <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Terminology</h4>
+      <p className="text-[11px] text-slate-500 mb-2">
+        Override the words customers see for this category (empty = built-in defaults). Languages: en, te, hi. Keys: {TERMINOLOGY_KEYS}.
+        Optional: "icon", "memory": {'{'} "focus": [...], "sensitiveHealthData": false {'}'}.
+      </p>
+      <textarea
+        className="input-field w-full font-mono text-xs"
+        rows={8}
+        placeholder={'{\n  "en": { "customer": "member", "staffMember": "trainer" }\n}'}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <div className="flex justify-end mt-2">
+        <button className="btn-primary text-xs px-3 py-1.5" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save terminology'}</button>
+      </div>
+    </div>
+  )
+}
+
 export default function Categories() {
   const { addToast } = useToast()
 
@@ -306,9 +356,10 @@ export default function Categories() {
                 {/* Commission Rates */}
                 {selectedCat.commissionRates && (
                   <div className="mb-4">
-                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Commission Rates</h4>
+                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Lead Commission Rates</h4>
+                    <p className="text-[11px] text-slate-500 mb-3">Appointment commission is 10% of the booked service price on every plan and category (not configured here).</p>
                     <div className="grid grid-cols-3 gap-3">
-                      {Object.entries(selectedCat.commissionRates).map(([key, val]) => (
+                      {Object.entries(selectedCat.commissionRates).filter(([key]) => key === 'lead').map(([key, val]) => (
                         <div key={key} className="bg-white/[0.03] rounded-xl p-3">
                           <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{key}</p>
                           <p className="text-sm font-bold text-white">
@@ -334,11 +385,14 @@ export default function Categories() {
                   </div>
                 )}
 
+                {/* Customer-facing vocabulary (Phase 1) */}
+                <TerminologyEditor key={selectedCat.id} category={selectedCat} onSaved={fetchData} />
+
                 {/* Raw Fields (for any custom backend data) */}
                 <div className="mt-4 pt-4 border-t border-white/[0.05]">
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">All Fields</h4>
                   <div className="space-y-1.5">
-                    {Object.entries(selectedCat).filter(([k]) => !['commissionRates', 'subCategories'].includes(k)).map(([key, val]) => (
+                    {Object.entries(selectedCat).filter(([k]) => !['commissionRates', 'subCategories', 'terminology'].includes(k)).map(([key, val]) => (
                       <div key={key} className="flex items-center justify-between text-xs py-1 border-b border-white/[0.03]">
                         <span className="text-slate-500 font-mono">{key}</span>
                         <span className="text-slate-300">{typeof val === 'boolean' ? (val ? 'true' : 'false') : String(val ?? '—')}</span>

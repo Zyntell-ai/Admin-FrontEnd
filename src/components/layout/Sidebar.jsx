@@ -1,11 +1,13 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { getNumberRequestSummary } from '../../api/admin'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { useSidebar } from '../../context/SidebarContext'
 import {
   LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
   DollarSign, Building2, Tag, Bell, Settings,
-  LogOut, ChevronLeft, ChevronRight,
+  LogOut, ChevronLeft, ChevronRight, Phone,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -16,6 +18,7 @@ const NAV = [
   { path: '/billing',     label: 'Billing',      icon: CreditCard      },
   { path: '/commissions', label: 'Commissions',  icon: DollarSign      },
   { path: '/businesses',  label: 'Businesses',   icon: Building2       },
+  { path: '/phone-numbers', label: 'Phone Numbers', icon: Phone, badge: 'numberRequests' },
   { path: '/categories',  label: 'Categories',   icon: Tag             },
   { path: '/alerts',      label: 'Alerts',       icon: Bell            },
   { path: '/settings',    label: 'Settings',     icon: Settings        },
@@ -27,6 +30,19 @@ export default function Sidebar() {
   const { admin, logout }     = useAuth()
   const { addToast }          = useToast()
   const { collapsed, setCollapsed } = useSidebar()
+
+  // [NOTIFICATION]: V1 admin notification for number requests — pending-count badge on the nav item
+  const [numberSummary, setNumberSummary] = useState(null)
+  useEffect(() => {
+    let alive = true
+    const load = () => getNumberRequestSummary().then((d) => { if (alive) setNumberSummary(d) }).catch(() => {})
+    load()
+    const timer = setInterval(load, 60000)
+    window.addEventListener('zyntell:number-requests-changed', load)
+    return () => { alive = false; clearInterval(timer); window.removeEventListener('zyntell:number-requests-changed', load) }
+  }, [location.pathname])
+  // Pending requests + trial numbers past their 14 days (awaiting manual deactivation)
+  const badges = { numberRequests: (numberSummary?.counts?.PENDING || 0) + (numberSummary?.trialNumbers?.expired || 0) }
 
   const initials = admin?.name
     ? admin.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -83,7 +99,7 @@ export default function Sidebar() {
           </p>
         )}
         <ul className="space-y-0.5">
-          {NAV.map(({ path, label, icon: Icon }) => {
+          {NAV.map(({ path, label, icon: Icon, badge }) => {
             const isActive = path === '/'
               ? location.pathname === '/'
               : location.pathname.startsWith(path)
@@ -119,6 +135,14 @@ export default function Sidebar() {
                   />
                   {!collapsed && (
                     <span className="flex-1 truncate">{label}</span>
+                  )}
+                  {badge && badges[badge] > 0 && (
+                    <span
+                      title={`${badges[badge]} number item${badges[badge] === 1 ? '' : 's'} need attention (pending requests / ended trial numbers)`}
+                      className={clsx('text-[10px] font-bold rounded-full bg-amber-500 text-black leading-none', collapsed ? 'absolute top-1 right-1 px-1 py-0.5' : 'px-1.5 py-0.5')}
+                    >
+                      {badges[badge]}
+                    </span>
                   )}
                 </NavLink>
               </li>
