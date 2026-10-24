@@ -5,13 +5,10 @@ import { useToast } from '../context/ToastContext'
 import { getBusinesses } from '../api/admin'
 import { Search, Plus, Building2, RefreshCw, ArrowRight } from 'lucide-react'
 import clsx from 'clsx'
+import { deriveStatus } from '../utils/businessStatus'
 
 // ── Status helpers ─────────────────────────────────────────────
-function deriveStatus(b) {
-  if (b.isTrialActive) return 'trial'
-  if (b.isActive)      return 'active'
-  return 'suspended'
-}
+// deriveStatus — shared with BusinessDetail (utils/businessStatus.js)
 
 // ── AI Health Score: computed from available business fields ───
 function computeHealthScore(b) {
@@ -67,6 +64,9 @@ const STATUS_CFG = {
   active:    { label: 'Active',    className: 'badge-green'  },
   trial:     { label: 'Trial',     className: 'badge-yellow' },
   suspended: { label: 'Suspended', className: 'badge-red'    },
+  pending:   { label: 'Awaiting approval', className: 'badge-indigo' },
+  signup:    { label: 'Signup in progress', className: 'badge-gray' },
+  rejected:  { label: 'Not approved', className: 'badge-red' },
 }
 
 const CATEGORY_EMOJI = {
@@ -87,7 +87,7 @@ const PLAN_BADGE = {
   free: { label: 'Free', className: 'badge-gray'    },
 }
 
-const STATUSES = ['All', 'active', 'trial', 'suspended']
+const STATUSES = ['All', 'active', 'trial', 'suspended', 'pending', 'signup', 'rejected']
 const PLANS    = ['All Plans', 'pro', 'plus', 'free']
 
 // ── Business tile ──────────────────────────────────────────────

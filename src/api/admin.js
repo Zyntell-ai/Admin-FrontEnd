@@ -426,3 +426,30 @@ export async function getExotelHealth() {
 // ─────────────────────────────────────────
 // EXPORTS
 // ─────────────────────────────────────────
+
+// ── New Clients (signup applications) ───────────────────────────────────────
+// Flow: business registers → completes onboarding (pending_review) → an admin approves (trial starts) or rejects.
+
+/** Applications by status (default pending_review) → { status, requests, canDecide } */
+export async function getSignupRequests(status = 'pending_review') {
+  const res = await apiClient.get('/admin/signup-requests', { params: { status } })
+  return res.data
+}
+
+/** One application: { request, business, settings, services, staff, workingHours, history, canDecide } */
+export async function getSignupRequest(id) {
+  const res = await apiClient.get(`/admin/signup-requests/${id}`)
+  return res.data
+}
+
+/** Approve (pending_review only) — starts the 14-day trial; 409 APPROVAL_CONFLICT if already decided */
+export async function approveSignupRequest(id) {
+  const res = await apiClient.post(`/admin/signup-requests/${id}/approve`)
+  return res.data
+}
+
+/** Reject with a reason (3–500 characters, shown to the applicant); 409 APPROVAL_CONFLICT if already decided */
+export async function rejectSignupRequest(id, reason) {
+  const res = await apiClient.post(`/admin/signup-requests/${id}/reject`, { reason })
+  return res.data
+}

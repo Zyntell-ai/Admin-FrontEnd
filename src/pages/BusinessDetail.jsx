@@ -56,6 +56,7 @@ import {
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import clsx from 'clsx'
+import { deriveStatus } from '../utils/businessStatus'
 
 // ─────────────────────────────────────────
 // CONSTANTS & CONFIG
@@ -78,18 +79,7 @@ const FEATURE_LABELS = {
   conversationCap:      'Conversation Cap (per month, -1=unlimited)',
 }
 
-/**
- * @function    deriveStatus
- * @purpose     Derives a human-readable status string from business flags
- * @param  {Object} b - Business object with isTrialActive and isActive flags
- * @returns {string} 'unknown' | 'trial' | 'active' | 'suspended'
- */
-function deriveStatus(b) {
-  if (!b) return 'unknown'
-  if (b.isTrialActive) return 'trial'
-  if (b.isActive) return 'active'
-  return 'suspended'
-}
+// deriveStatus — shared with Businesses (utils/businessStatus.js): suspension, then signup application, then trial/active
 
 /**
  * @function    LocationCard
@@ -471,7 +461,7 @@ export default function BusinessDetail() {
               </div>
               <div className="flex items-center gap-2">
                 <span className={clsx('badge text-xs px-2.5 py-1',
-                  bStatus === 'active' ? 'badge-green' : bStatus === 'trial' ? 'badge-yellow' : 'badge-red')}>
+                  bStatus === 'active' ? 'badge-green' : bStatus === 'trial' ? 'badge-yellow' : ['pending', 'signup'].includes(bStatus) ? 'badge-indigo' : 'badge-red')}>
                   ● {bStatus}
                 </span>
                 {bStatus === 'active' && (

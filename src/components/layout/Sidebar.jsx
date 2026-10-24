@@ -1,13 +1,13 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { getNumberRequestSummary } from '../../api/admin'
+import { getNumberRequestSummary, getSignupRequests } from '../../api/admin'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { useSidebar } from '../../context/SidebarContext'
 import {
   LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
   DollarSign, Building2, Tag, Bell, Settings,
-  LogOut, ChevronLeft, ChevronRight, Phone,
+  LogOut, ChevronLeft, ChevronRight, Phone, UserPlus,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -18,6 +18,7 @@ const NAV = [
   { path: '/billing',     label: 'Billing',      icon: CreditCard      },
   { path: '/commissions', label: 'Commissions',  icon: DollarSign      },
   { path: '/businesses',  label: 'Businesses',   icon: Building2       },
+  { path: '/new-clients', label: 'New Clients',  icon: UserPlus, badge: 'newClients' },
   { path: '/phone-numbers', label: 'Phone Numbers', icon: Phone, badge: 'numberRequests' },
   { path: '/categories',  label: 'Categories',   icon: Tag             },
   { path: '/alerts',      label: 'Alerts',       icon: Bell            },
@@ -41,8 +42,21 @@ export default function Sidebar() {
     window.addEventListener('zyntell:number-requests-changed', load)
     return () => { alive = false; clearInterval(timer); window.removeEventListener('zyntell:number-requests-changed', load) }
   }, [location.pathname])
+  // [NOTIFICATION]: Signup applications awaiting review — count badge on New Clients
+  const [pendingClients, setPendingClients] = useState(0)
+  useEffect(() => {
+    let alive = true
+    const load = () => getSignupRequests('pending_review').then((d) => { if (alive) setPendingClients(d.requests?.length || 0) }).catch(() => {})
+    load()
+    const timer = setInterval(load, 60000)
+    window.addEventListener('zyntell:signup-requests-changed', load)
+    return () => { alive = false; clearInterval(timer); window.removeEventListener('zyntell:signup-requests-changed', load) }
+  }, [location.pathname])
   // Pending requests + trial numbers past their 14 days (awaiting manual deactivation)
-  const badges = { numberRequests: (numberSummary?.counts?.PENDING || 0) + (numberSummary?.trialNumbers?.expired || 0) }
+  const badges = {
+    numberRequests: (numberSummary?.counts?.PENDING || 0) + (numberSummary?.trialNumbers?.expired || 0),
+    newClients: pendingClients,
+  }
 
   const initials = admin?.name
     ? admin.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -138,7 +152,9 @@ export default function Sidebar() {
                   )}
                   {badge && badges[badge] > 0 && (
                     <span
-                      title={`${badges[badge]} number item${badges[badge] === 1 ? '' : 's'} need attention (pending requests / ended trial numbers)`}
+                      title={badge === 'newClients'
+                        ? `${badges[badge]} signup application${badges[badge] === 1 ? '' : 's'} awaiting review`
+                        : `${badges[badge]} number item${badges[badge] === 1 ? '' : 's'} need attention (pending requests / ended trial numbers)`}
                       className={clsx('text-[10px] font-bold rounded-full bg-amber-500 text-black leading-none', collapsed ? 'absolute top-1 right-1 px-1 py-0.5' : 'px-1.5 py-0.5')}
                     >
                       {badges[badge]}
