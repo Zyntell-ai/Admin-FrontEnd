@@ -70,6 +70,7 @@ const ALL_PERMISSIONS = [
   { key: 'handle_alerts',     label: 'Handle Alerts',     desc: 'Resolve, assign, dismiss alerts' },
   { key: 'manage_categories', label: 'Manage Categories', desc: 'Edit categories and commission rates' },
   { key: 'manage_admins',     label: 'Manage Admins',     desc: 'Create and manage admin users' },
+  { key: 'access_call_recordings', label: 'Call Recordings', desc: 'Open a call recording for an investigation (audited)' },
 ]
 
 // ─────────────────────────────────────────

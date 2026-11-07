@@ -474,3 +474,40 @@ export async function decideHealthcareRequest(id, decision, note) {
   const res = await apiClient.post(`/admin/businesses/${id}/healthcare-request/${decision}`, { ...(note ? { note } : {}) })
   return res.data
 }
+
+// ─── Call management & investigation (Phase 4) ───
+
+/** A business's calls (metadata only) → { calls, nextCursor, range, assignedNumbers, canAccessRecordings, recordingAccessEnabled } */
+export async function getBusinessCalls(id, { from, to, cursor, limit } = {}) {
+  const res = await apiClient.get(`/admin/businesses/${id}/calls`, { params: { from, to, cursor, limit } })
+  return res.data
+}
+
+/**
+ * One call's recording, streamed through the backend (SUPER_ADMIN, audited, never stored). Returns a Blob held only in
+ * this browser tab's memory; the caller must revoke any object URL it creates. Errors carry the backend's message.
+ */
+export async function getCallRecording(id, callSid) {
+  try {
+    const res = await apiClient.get(`/admin/businesses/${id}/calls/${encodeURIComponent(callSid)}/recording`, { responseType: 'blob' })
+    return res.data
+  } catch (err) {
+    const data = err.response?.data
+    if (data instanceof Blob) {
+      try { const body = JSON.parse(await data.text()); err.response.data = body } catch { /* not JSON */ }
+    }
+    throw err
+  }
+}
+
+/** Recording-access audit for one business (SUPER_ADMIN) → { entries } */
+export async function getRecordingAccessLog(id) {
+  const res = await apiClient.get(`/admin/businesses/${id}/recording-access-log`)
+  return res.data
+}
+
+/** Approved businesses with no healthcare classification yet (Phase 5 review backlog) → { businesses, total, truncated } */
+export async function getUnclassifiedBusinesses() {
+  const res = await apiClient.get('/admin/healthcare-classification/unclassified')
+  return res.data
+}

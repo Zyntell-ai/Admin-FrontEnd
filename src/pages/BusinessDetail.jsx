@@ -57,6 +57,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import clsx from 'clsx'
 import { deriveStatus } from '../utils/businessStatus'
+import CallInvestigationCard from '../components/business/CallInvestigationCard'
 
 // ─────────────────────────────────────────
 // CONSTANTS & CONFIG
@@ -617,6 +618,7 @@ export default function BusinessDetail() {
 
             <LocationCard businessId={id} location={data.location} readiness={data.locationReadiness} onSaved={fetchData} />
             <HealthcareCard businessId={id} business={biz} settings={data.settings} onSaved={fetchData} />
+            <CallInvestigationCard businessId={id} />
           </div>
 
           {/* Right: Revenue Chart */}

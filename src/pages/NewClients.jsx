@@ -17,7 +17,7 @@ import { Link } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { getSignupRequests, getSignupRequest, approveSignupRequest, rejectSignupRequest, getHealthcareRequests } from '../api/admin'
+import { getSignupRequests, getSignupRequest, approveSignupRequest, rejectSignupRequest, getHealthcareRequests, getUnclassifiedBusinesses } from '../api/admin'
 import { UserPlus, RefreshCw, CheckCircle, XCircle, Eye } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -72,6 +72,41 @@ function HealthcareRequests({ canDecide }) {
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+/**
+ * Phase 5 review backlog: approved businesses that have NO healthcare classification yet (registered before Phase 2).
+ * Read-only list — each one is classified only by an explicit admin decision on its business page (audited). The
+ * category hint is shown to help prioritise; it is never used as the classification.
+ */
+function UnclassifiedBacklog({ canDecide }) {
+  const [data, setData] = useState(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!canDecide) return
+    getUnclassifiedBusinesses().then(setData).catch(() => setData(null))
+  }, [canDecide])
+  if (!canDecide || !data?.total) return null
+  return (
+    <div className="card p-4 mb-5">
+      <button className="w-full flex items-center justify-between text-xs font-semibold text-sky-300" onClick={() => setOpen((o) => !o)}>
+        <span>Healthcare classification review — {data.total} existing business{data.total === 1 ? '' : 'es'} not yet classified{data.truncated ? ' (list truncated)' : ''}</span>
+        <span>{open ? 'Hide' : 'Review'}</span>
+      </button>
+      {open && (
+        <ul className="space-y-1.5 mt-3">
+          {data.businesses.map((b) => (
+            <li key={b.businessId} className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-slate-200 truncate">
+                {b.name || b.businessId} <span className="text-slate-500">· {b.category || 'no category'}{b.categorySaysHealthcare ? ' (category suggests healthcare — please verify)' : ''}{b.pendingRequest ? ' · owner request pending' : ''}</span>
+              </span>
+              <Link to={`/businesses/${b.businessId}`} className="text-indigo-300 hover:underline shrink-0">Classify →</Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -178,6 +213,7 @@ export default function NewClients() {
       </div>
 
       <HealthcareRequests canDecide={canDecide} />
+      <UnclassifiedBacklog canDecide={canDecide} />
 
       <div className="card p-4 mb-5 text-xs text-slate-400 leading-relaxed">
         <strong className="text-slate-200">Review:</strong> a business appears here after it completes signup and setup.
