@@ -58,7 +58,11 @@ import clsx from 'clsx'
 // CONSTANTS & CONFIG
 // ─────────────────────────────────────────
 const CATEGORIES = ['All', 'Healthcare', 'Restaurant', 'Real Estate', 'Beauty', 'Education']
-const BOOKING_STATUSES = ['All', 'CONFIRMED', 'COMPLETED', 'NO_SHOW', 'CANCELLED']
+// NO_SHOW stays filterable for historical bookings (no booking is marked NO_SHOW any more)
+const BOOKING_STATUSES = ['All', 'PENDING', 'CONFIRMED', 'COMPLETED', 'NO_SHOW', 'CANCELLED']
+
+/** Safety net: legacy EN_ROUTE / ARRIVED (removed customer steps) are shown and counted as CONFIRMED */
+const displayBookingStatus = (status) => (status === 'EN_ROUTE' || status === 'ARRIVED' ? 'CONFIRMED' : status)
 const LS_KEY = 'zyntell_bookings_filters'
 
 /**
@@ -72,7 +76,8 @@ function BookingStatusBadge({ status }) {
     CONFIRMED: 'badge-indigo', COMPLETED: 'badge-green',
     NO_SHOW: 'badge-red', CANCELLED: 'badge-gray', PENDING: 'badge-yellow'
   }
-  return <span className={clsx('badge text-[10px]', map[status] || 'badge-gray')}>{status}</span>
+  const shown = displayBookingStatus(status)
+  return <span className={clsx('badge text-[10px]', map[shown] || 'badge-gray')}>{shown}</span>
 }
 
 /**
@@ -132,9 +137,10 @@ function aggregateByBusiness(bookings, businesses) {
     }
     const row = bizMap[bk.businessId]
     row.totalBookings++
-    if (bk.status === 'CONFIRMED') row.confirmed++
-    if (bk.status === 'COMPLETED') row.completed++
-    if (bk.status === 'NO_SHOW')   row.noShows++
+    const status = displayBookingStatus(bk.status)
+    if (status === 'CONFIRMED') row.confirmed++
+    if (status === 'COMPLETED') row.completed++
+    if (status === 'NO_SHOW')   row.noShows++ // historical
   })
   return Object.values(bizMap).filter(r => r.totalBookings > 0)
 }

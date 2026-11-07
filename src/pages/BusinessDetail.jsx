@@ -64,13 +64,20 @@ import { deriveStatus } from '../utils/businessStatus'
 const TABS = ['Overview', 'Commission Ledger', 'Alerts', 'Invoice History', 'Feature Control', 'Plan History']
 
 // Feature keys with human-readable labels (mirrors plans.js)
+// Features that every plan includes and no override can switch off — shown read-only so the admin is never told an
+// override disables them. (OTP check-in is not gated by the showupVerification flag; an existing stored override value
+// is left untouched.)
+const ALWAYS_ON_FEATURES = {
+  showupVerification: 'Always on — every plan (an override has no effect)',
+}
+
 const FEATURE_LABELS = {
   whatsappBot:          'WhatsApp AI Bot',
   virtualNumber:        'Virtual Number',
   missedCallToWhatsApp: 'Missed Call → WhatsApp',
   aiVoiceAgent:         'AI Voice Agent',
   leadQualification:    'Lead Qualification',
-  showupVerification:   'Show-up Verification',
+  showupVerification:   'OTP Check-in',
   analyticsDashboard:   'Analytics Dashboard',
   multilingualSupport:  'Multilingual (Telugu/Hindi/English)',
   leadAuctionAccess:    'Lead Auction Access',
@@ -721,6 +728,7 @@ export default function BusinessDetail() {
                         const planVal   = featureData.planFeatures?.[key]
                         const overrideVal = overrideDraft[key]
                         const isNumeric = key === 'conversationCap'
+                        const alwaysOn  = ALWAYS_ON_FEATURES[key]
 
                         return (
                           <tr key={key} className="border-b border-white/[0.04] table-row-hover">
@@ -731,7 +739,9 @@ export default function BusinessDetail() {
                                 : planVal ? <span className="text-emerald-400">✓ Enabled</span> : <span className="text-slate-500">✗ Disabled</span>}
                             </td>
                             <td className="px-4 py-3">
-                              {isNumeric ? (
+                              {alwaysOn ? (
+                                <span className="text-xs text-emerald-400">{alwaysOn}</span>
+                              ) : isNumeric ? (
                                 // [UI]: Numeric override — text input for conversation cap
                                 <div className="flex items-center gap-2">
                                   <input

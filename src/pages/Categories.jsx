@@ -357,7 +357,7 @@ export default function Categories() {
                 {selectedCat.commissionRates && (
                   <div className="mb-4">
                     <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Lead Commission Rates</h4>
-                    <p className="text-[11px] text-slate-500 mb-3">Appointment commission is 10% of the booked service price on every plan and category (not configured here).</p>
+                    <p className="text-[11px] text-slate-500 mb-3">No appointment commission is charged on any plan or category (earlier commissions remain on record).</p>
                     <div className="grid grid-cols-3 gap-3">
                       {Object.entries(selectedCat.commissionRates).filter(([key]) => key === 'lead').map(([key, val]) => (
                         <div key={key} className="bg-white/[0.03] rounded-xl p-3">
