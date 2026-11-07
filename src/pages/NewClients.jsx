@@ -17,7 +17,7 @@ import { Link } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { getSignupRequests, getSignupRequest, approveSignupRequest, rejectSignupRequest } from '../api/admin'
+import { getSignupRequests, getSignupRequest, approveSignupRequest, rejectSignupRequest, getHealthcareRequests } from '../api/admin'
 import { UserPlus, RefreshCw, CheckCircle, XCircle, Eye } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -50,6 +50,32 @@ const money = (s) => {
   return '—'
 }
 
+/**
+ * @function    HealthcareRequests
+ * @purpose     Phase 2 — owners' pending healthcare-classification change requests (decided on the business page)
+ */
+function HealthcareRequests({ canDecide }) {
+  const [requests, setRequests] = useState([])
+  useEffect(() => {
+    if (!canDecide) return
+    getHealthcareRequests().then((r) => setRequests(r.requests || [])).catch(() => setRequests([]))
+  }, [canDecide])
+  if (!canDecide || !requests.length) return null
+  return (
+    <div className="card p-4 mb-5">
+      <p className="text-xs font-semibold text-amber-300 mb-2">Healthcare classification change requests ({requests.length})</p>
+      <ul className="space-y-1.5">
+        {requests.map((r) => (
+          <li key={r.businessId} className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-slate-200 truncate">{r.name || r.businessId} — wants: {r.request?.requestedValue ? 'Healthcare provider' : 'Not a healthcare provider'}</span>
+            <Link to={`/businesses/${r.businessId}`} className="text-indigo-300 hover:underline shrink-0">Review →</Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export default function NewClients() {
   const { addToast } = useToast()
   const [filter, setFilter] = useState('pending_review')
@@ -64,6 +90,8 @@ export default function NewClients() {
   const [detailError, setDetailError] = useState(null)
   const [mode, setMode] = useState('review') // 'review' | 'reject'
   const [reason, setReason] = useState('')
+  // Phase 2: healthcare classification chosen as part of approval — required, never inferred from the category
+  const [healthcare, setHealthcare] = useState(null) // null | true | false
   const [busy, setBusy] = useState(false)
 
   const fetchData = useCallback(async () => {
@@ -84,6 +112,7 @@ export default function NewClients() {
 
   const openReview = async (r) => {
     setSelected(r)
+    setHealthcare(null)
     setDetail(null)
     setDetailError(null)
     setMode('review')
@@ -100,7 +129,7 @@ export default function NewClients() {
     setBusy(true)
     try {
       if (kind === 'approve') {
-        const res = await approveSignupRequest(selected.id)
+        const res = await approveSignupRequest(selected.id, { isHealthcare: healthcare })
         const access = res.trialStarted
           ? 'access is open and the 14-day trial has started'
           : `access is open on its existing ${res.plan || ''} plan (no trial started)`
@@ -147,6 +176,8 @@ export default function NewClients() {
         </div>
         <button onClick={fetchData} className="btn-ghost text-xs px-3 py-1.5 gap-1.5"><RefreshCw size={12} /> Refresh</button>
       </div>
+
+      <HealthcareRequests canDecide={canDecide} />
 
       <div className="card p-4 mb-5 text-xs text-slate-400 leading-relaxed">
         <strong className="text-slate-200">Review:</strong> a business appears here after it completes signup and setup.
@@ -311,11 +342,22 @@ export default function NewClients() {
                       </div>
                     </section>
                   ) : (
-                    <div className="flex gap-2 justify-end pt-1">
+                    <div className="space-y-3 pt-1">
+                    <fieldset className="space-y-1.5">
+                      <legend className="text-xs text-slate-400">Healthcare classification (required) — the category alone does not decide this</legend>
+                      {[[true, 'Healthcare provider — strict medical-safety rules for its AI'], [false, 'Not a healthcare provider']].map(([value, label]) => (
+                        <label key={String(value)} className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                          <input type="radio" name="healthcare" checked={healthcare === value} onChange={() => setHealthcare(value)} disabled={busy} />
+                          {label}
+                        </label>
+                      ))}
+                    </fieldset>
+                    <div className="flex gap-2 justify-end">
                       <button className="btn-ghost text-xs px-3 py-1.5 gap-1 text-red-400" disabled={busy} onClick={() => setMode('reject')}><XCircle size={12} /> Reject…</button>
-                      <button className="btn-primary text-xs px-3 py-1.5 gap-1" disabled={busy} onClick={() => decide('approve')}>
+                      <button className="btn-primary text-xs px-3 py-1.5 gap-1" disabled={busy || healthcare === null} onClick={() => decide('approve')}>
                         <CheckCircle size={12} /> {busy ? 'Working…' : 'Approve & start trial'}
                       </button>
+                    </div>
                     </div>
                   )
                 )}

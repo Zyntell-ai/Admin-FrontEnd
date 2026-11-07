@@ -47,7 +47,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import Modal from '../components/ui/Modal'
 import { useToast } from '../context/ToastContext'
-import { isValidBusinessId, getBusinessProfile, updateBusiness, suspendBusiness, getFeatureOverrides, saveFeatureOverrides, changePlan, getPlanHistory, getExotelHealth } from '../api/admin'
+import { isValidBusinessId, getBusinessProfile, updateBusiness, suspendBusiness, getFeatureOverrides, saveFeatureOverrides, changePlan, getPlanHistory, getExotelHealth, setHealthcareClassification, decideHealthcareRequest } from '../api/admin'
 import {
   ArrowLeft, MapPin, Tag, Star, Ban, AlertOctagon,
   Unlock, TrendingUp, MessageSquare, Edit2, Check,
@@ -87,6 +87,73 @@ const FEATURE_LABELS = {
 }
 
 // deriveStatus — shared with Businesses (utils/businessStatus.js): suspension, then signup application, then trial/active
+
+/**
+ * @function    HealthcareCard
+ * @purpose     Phase 2 — the business's healthcare classification (authoritative for its AI safety rules) and the owner's
+ *              pending change request. Only signup approvers (SUPER_ADMIN / ADMIN) may change or decide; every action is
+ *              audited by the backend. Also shows the business's own configured emergency contact (read-only).
+ */
+function HealthcareCard({ businessId, business, settings, onSaved }) {
+  const { addToast } = useToast()
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const value = business?.isHealthcare === true ? true : business?.isHealthcare === false ? false : null
+  const request = business?.healthcareClassificationRequest
+  const pending = request?.status === 'PENDING'
+  const contact = settings?.emergencyContact
+
+  const run = async (fn, ok) => {
+    setBusy(true)
+    try { await fn(); addToast(ok, 'success'); setNote(''); onSaved?.() }
+    catch (err) { addToast(err.response?.data?.error || 'Action failed', 'error') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="card p-5">
+      <h4 className="section-title mb-3">Healthcare classification</h4>
+      <p className="text-xs text-white mb-1">
+        {value === true ? '🩺 Healthcare provider — strict medical-safety rules on voice and WhatsApp'
+          : value === false ? 'Not a healthcare provider' : 'Not classified yet (legacy business — behaves as before)'}
+      </p>
+      {business?.healthcareClassification?.source && (
+        <p className="text-[11px] text-slate-500 mb-3">Set via {business.healthcareClassification.source.replace(/_/g, ' ')}</p>
+      )}
+
+      {pending && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 mb-3 space-y-1">
+          <p className="text-xs text-amber-300">Owner requests: {request.requestedValue ? 'Healthcare provider' : 'Not a healthcare provider'}</p>
+          <p className="text-[11px] text-slate-400">Reason: {request.reason}</p>
+        </div>
+      )}
+
+      <label className="block text-[11px] text-slate-400 mb-1">{pending ? 'Decision note (required to reject)' : 'Note (optional)'}</label>
+      <input className="input-field w-full text-xs py-1 mb-3" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} />
+
+      {pending ? (
+        <div className="flex gap-2 flex-wrap">
+          <button className="btn-primary text-xs px-3 py-1.5" disabled={busy}
+            onClick={() => run(() => decideHealthcareRequest(businessId, 'approve', note.trim()), 'Request approved — classification updated')}>Approve request</button>
+          <button className="btn-ghost text-xs px-3 py-1.5 text-red-400" disabled={busy || note.trim().length < 3}
+            onClick={() => run(() => decideHealthcareRequest(businessId, 'reject', note.trim()), 'Request rejected')}>Reject request</button>
+        </div>
+      ) : (
+        <div className="flex gap-2 flex-wrap">
+          {value !== true && <button className="btn-primary text-xs px-3 py-1.5" disabled={busy}
+            onClick={() => run(() => setHealthcareClassification(businessId, true, note.trim()), 'Classified as healthcare provider')}>Mark as healthcare</button>}
+          {value !== false && <button className="btn-ghost text-xs px-3 py-1.5" disabled={busy}
+            onClick={() => run(() => setHealthcareClassification(businessId, false, note.trim()), 'Classified as not healthcare')}>Mark as not healthcare</button>}
+        </div>
+      )}
+
+      <div className="mt-4 pt-3 border-t border-white/[0.06]">
+        <p className="text-[11px] text-slate-500 mb-1">Emergency contact (set by the business)</p>
+        <p className="text-xs text-white">{contact ? `${contact.name} · ${contact.phone}${contact.note ? ` — ${contact.note}` : ''}` : 'Not configured — the AI never invents one'}</p>
+      </div>
+    </div>
+  )
+}
 
 /**
  * @function    LocationCard
@@ -549,6 +616,7 @@ export default function BusinessDetail() {
             </div>
 
             <LocationCard businessId={id} location={data.location} readiness={data.locationReadiness} onSaved={fetchData} />
+            <HealthcareCard businessId={id} business={biz} settings={data.settings} onSaved={fetchData} />
           </div>
 
           {/* Right: Revenue Chart */}

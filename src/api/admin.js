@@ -443,13 +443,34 @@ export async function getSignupRequest(id) {
 }
 
 /** Approve (pending_review only) — starts the 14-day trial; 409 APPROVAL_CONFLICT if already decided */
-export async function approveSignupRequest(id) {
-  const res = await apiClient.post(`/admin/signup-requests/${id}/approve`)
+export async function approveSignupRequest(id, { isHealthcare } = {}) {
+  // Phase 2: the healthcare classification is required at approval (true / false)
+  const res = await apiClient.post(`/admin/signup-requests/${id}/approve`, { isHealthcare })
   return res.data
 }
 
 /** Reject with a reason (3–500 characters, shown to the applicant); 409 APPROVAL_CONFLICT if already decided */
 export async function rejectSignupRequest(id, reason) {
   const res = await apiClient.post(`/admin/signup-requests/${id}/reject`, { reason })
+  return res.data
+}
+
+// ─── Healthcare classification (Phase 2) — signup approvers only ──────────────
+
+/** Set a business's healthcare classification directly (audited) */
+export async function setHealthcareClassification(id, isHealthcare, note) {
+  const res = await apiClient.put(`/admin/businesses/${id}/healthcare`, { isHealthcare, ...(note ? { note } : {}) })
+  return res.data
+}
+
+/** Pending owner requests to change the classification */
+export async function getHealthcareRequests() {
+  const res = await apiClient.get('/admin/healthcare-requests')
+  return res.data // { requests }
+}
+
+/** Approve or reject an owner's pending request ('approve' | 'reject'; a note is required to reject) */
+export async function decideHealthcareRequest(id, decision, note) {
+  const res = await apiClient.post(`/admin/businesses/${id}/healthcare-request/${decision}`, { ...(note ? { note } : {}) })
   return res.data
 }
