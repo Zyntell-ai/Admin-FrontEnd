@@ -37,6 +37,7 @@ import BusinessDetail from './pages/BusinessDetail'
 import Categories from './pages/Categories'
 import PhoneNumbers from './pages/PhoneNumbers'
 import NewClients from './pages/NewClients'
+import FaqApprovals from './pages/FaqApprovals'
 import Alerts from './pages/Alerts'
 import Settings from './pages/Settings'
 import Profile from './pages/Profile'
@@ -123,6 +124,7 @@ export default function App() {
         <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
         <Route path="/phone-numbers" element={<ProtectedRoute><PhoneNumbers /></ProtectedRoute>} />
         <Route path="/new-clients" element={<ProtectedRoute><NewClients /></ProtectedRoute>} />
+        <Route path="/faq-approvals" element={<ProtectedRoute><FaqApprovals /></ProtectedRoute>} />
         <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

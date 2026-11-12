@@ -511,3 +511,43 @@ export async function getUnclassifiedBusinesses() {
   const res = await apiClient.get('/admin/healthcare-classification/unclassified')
   return res.data
 }
+
+// ─── FAQ approval (Batch 2) — healthcare / unclassified businesses' FAQs need an explicit admin decision ───
+
+/** FAQs awaiting approval → { faqs: [{ faqId, businessId, businessName, isHealthcare, question, answer, category, version, ... }] } */
+export async function getFaqApprovals(businessId) {
+  const res = await apiClient.get('/admin/faq-approvals', { params: businessId ? { businessId } : {} })
+  return res.data
+}
+
+/** Approve the exact version that was reviewed (409 STALE_VERSION if it changed meanwhile) */
+export async function approveFaq(faqId, version, note) {
+  const res = await apiClient.post(`/admin/faqs/${faqId}/approve`, { version, ...(note ? { note } : {}) })
+  return res.data
+}
+
+/** Reject the exact version that was reviewed, with a reason the business owner sees */
+export async function rejectFaq(faqId, version, reason) {
+  const res = await apiClient.post(`/admin/faqs/${faqId}/reject`, { version, reason })
+  return res.data
+}
+
+/** Audit trail of one FAQ → { history } */
+export async function getFaqHistory(faqId) {
+  const res = await apiClient.get(`/admin/faqs/${faqId}/history`)
+  return res.data
+}
+
+// ─── FAQ knowledge retrieval mode (Batch 3) ───
+
+/** → { businessId, mode, effectiveMode, globallyAllowed } */
+export async function getKnowledgeRetrieval(id) {
+  const res = await apiClient.get(`/admin/businesses/${id}/knowledge-retrieval`)
+  return res.data
+}
+
+/** mode: 'OFF' | 'SHADOW' | 'ON' (audited; effective only while the global switch is on) */
+export async function setKnowledgeRetrieval(id, mode) {
+  const res = await apiClient.put(`/admin/businesses/${id}/knowledge-retrieval`, { mode })
+  return res.data
+}

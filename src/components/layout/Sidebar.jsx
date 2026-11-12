@@ -7,7 +7,7 @@ import { useSidebar } from '../../context/SidebarContext'
 import {
   LayoutDashboard, CalendarCheck, BarChart3, CreditCard,
   DollarSign, Building2, Tag, Bell, Settings,
-  LogOut, ChevronLeft, ChevronRight, Phone, UserPlus,
+  LogOut, ChevronLeft, ChevronRight, Phone, UserPlus, ShieldCheck,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -19,6 +19,7 @@ const NAV = [
   { path: '/commissions', label: 'Commissions',  icon: DollarSign      },
   { path: '/businesses',  label: 'Businesses',   icon: Building2       },
   { path: '/new-clients', label: 'New Clients',  icon: UserPlus, badge: 'newClients' },
+  { path: '/faq-approvals', label: 'FAQ Approvals', icon: ShieldCheck },
   { path: '/phone-numbers', label: 'Phone Numbers', icon: Phone, badge: 'numberRequests' },
   { path: '/categories',  label: 'Categories',   icon: Tag             },
   { path: '/alerts',      label: 'Alerts',       icon: Bell            },
